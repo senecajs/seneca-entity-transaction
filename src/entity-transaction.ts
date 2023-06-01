@@ -57,7 +57,7 @@ class TrxApi {
 
 
 function tryRetrieveTrxInfo(seneca: any): Trx {
-  return seneca.custom?.entity_transaction?.transaction
+  return seneca.fixedmeta?.custom?.entity_transaction?.trx
 }
 
 

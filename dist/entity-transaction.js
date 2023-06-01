@@ -30,8 +30,8 @@ class TrxApi {
     }
 }
 function tryRetrieveTrxInfo(seneca) {
-    var _a, _b;
-    return (_b = (_a = seneca.custom) === null || _a === void 0 ? void 0 : _a.entity_transaction) === null || _b === void 0 ? void 0 : _b.transaction;
+    var _a, _b, _c;
+    return (_c = (_b = (_a = seneca.fixedmeta) === null || _a === void 0 ? void 0 : _a.custom) === null || _b === void 0 ? void 0 : _b.entity_transaction) === null || _c === void 0 ? void 0 : _c.trx;
 }
 function entity_transaction() {
     let strategy = null;
