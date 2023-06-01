@@ -49,11 +49,8 @@
     "knex": "2.4.2",
     "lodash.once": "4.1.1",
     "pg": "8.11.0",
-    "seneca": "3.30.0",
+    "seneca": "3.30.1",
     "seneca-msg-test": "3.4.0",
     "typescript": "4.8.3"
-  },
-  "peerDependencies": {
-    "seneca": ">=3"
   }
 }
