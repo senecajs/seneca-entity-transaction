@@ -1,35 +1,36 @@
 /* Copyright © 2021-2022 Richard Rodger, MIT License. */
 
 
-type TrxApiConstructorArgs = {
-  seneca: any
-}
-
 type Trx = {
-  handle: any
+  ctx: any
 }
 
-type PluginOpts = {
+type TrxStrategy = {
   startTrx: () => Promise<any>
   commitTrx: (trx: Trx) => Promise<any>
   rollbackTrx: (trx: Trx) => Promise<any>
 }
 
+type TrxApiConstructorArgs = {
+  seneca: any
+  strategy: TrxStrategy
+}
+
 
 class TrxApi {
   seneca: any
-  opts: PluginOpts
+  strategy: TrxStrategy
 
-  constructor(args: TrxApiConstructorArgs, opts: PluginOpts) {
+  constructor(args: TrxApiConstructorArgs) {
     this.seneca = args.seneca
-    this.opts = Object.assign({}, opts)
+    this.strategy = args.strategy
   }
 
   async start() {
-    const handle = await this.opts.startTrx.call(this.seneca)
+    const ctx = await this.strategy.startTrx.call(this.seneca)
 
     const trx: Trx = {
-      handle
+      ctx
     }
 
     const seneca_trx = this.seneca.delegate(null, {
@@ -45,12 +46,12 @@ class TrxApi {
 
   async commit() {
     const trx = tryRetrieveTrxInfo(this.seneca)
-    await this.opts.commitTrx.call(this.seneca, trx)
+    await this.strategy.commitTrx.call(this.seneca, trx)
   }
 
   async rollback() {
     const trx = tryRetrieveTrxInfo(this.seneca)
-    await this.opts.rollbackTrx.call(this.seneca, trx)
+    await this.strategy.rollbackTrx.call(this.seneca, trx)
   }
 }
 
@@ -60,22 +61,51 @@ function tryRetrieveTrxInfo(seneca: any): Trx {
 }
 
 
-function entity_transaction(this: any, opts: PluginOpts) {
-  if (typeof opts.startTrx !== 'function') {
-    throw new Error('opts.startTrx must be a function')
-  }
+function entity_transaction(this: any) {
+  let strategy: null | TrxStrategy = null
 
-  if (typeof opts.commitTrx !== 'function') {
-    throw new Error('opts.commitTrx must be a function')
-  }
 
-  if (typeof opts.rollbackTrx !== 'function') {
-    throw new Error('opts.rollbackTrx must be a function')
-  }
+  this.decorate('transaction', function (this: any) {
+    if (!strategy) {
+      throw new Error('Before you may use the entity-transaction plugin,' +
+      	" please use this plugin's registerStrategy export to register" +
+      	' your strategy for handling transactions')
+    }
 
-  this.decorate('trx', function(this: any) {
-    return new TrxApi({ seneca: this }, opts)
+    return new TrxApi({ seneca: this, strategy })
   })
+
+
+  function registerStrategy(strategy_: TrxStrategy | null) {
+    // User-facing code to help vanilla JS users catch missing overrides.
+    //
+    if (null == strategy_) {
+      throw new Error('Strategy must be an object')
+    }
+
+    if (typeof strategy_.startTrx !== 'function') {
+      throw new Error('Strategy must implement the startTrx function')
+    }
+
+    if (typeof strategy_.commitTrx !== 'function') {
+      throw new Error('Strategy must implement the commitTrx function')
+    }
+
+    if (typeof strategy_.rollbackTrx !== 'function') {
+      throw new Error('Strategy must implement the rollbackTrx function')
+    }
+
+    strategy = strategy_
+  }
+
+
+  return {
+    name: 'entity-transaction',
+
+    exports: {
+      registerStrategy
+    }
+  }
 }
 
 
