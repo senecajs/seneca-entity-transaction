@@ -9,7 +9,7 @@ declare type TrxStrategy = {
 declare function entity_transaction(this: any): {
     name: string;
     exports: {
-        registerStrategy: (strategy_: TrxStrategy | null) => void;
+        registerStrategy: (strategy_?: TrxStrategy) => void;
     };
 };
 declare namespace entity_transaction {
