@@ -5,10 +5,10 @@ type Trx = {
   ctx: any
 }
 
-type TrxStrategy = {
-  startTrx: () => Promise<any>
-  commitTrx: (trx: Trx) => Promise<any>
-  rollbackTrx: (trx: Trx) => Promise<any>
+interface TrxStrategy {
+  startTrx(): Promise<any>
+  commitTrx(trx: Trx): Promise<any>
+  rollbackTrx(trx: Trx): Promise<any>
 }
 
 type TrxApiConstructorArgs = {
