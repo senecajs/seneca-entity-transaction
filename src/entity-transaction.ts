@@ -77,7 +77,7 @@ function entity_transaction(this: any) {
 
 
   function registerStrategy(strategy_?: TrxStrategy) {
-    // User-facing code to help vanilla JS users catch missing overrides.
+    // NOTE: This is user-facing code to help vanilla JS users catch missing overrides.
     //
     if (null == strategy_) {
       throw new Error('Strategy must be an object')

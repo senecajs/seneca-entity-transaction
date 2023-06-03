@@ -131,26 +131,33 @@ describe('entity-transaction', () => {
       })
 
 
-      seneca.ready(async function () {
-	let num_calls = 0
+      seneca.ready(function () {
+      	async function impl() {
+	  let num_calls = 0
 
-	const senecatrx1 = await this.transaction().start()
-	const senecatrx2 = await this.transaction().start()
+	  const senecatrx1 = await this.transaction().start()
+	  const senecatrx2 = await this.transaction().start()
 
-	senecatrx1.act('hello:world', next)
-	senecatrx2.act('hello:world', next)
+	  senecatrx1.act('hello:world', next)
+	  senecatrx2.act('hello:world', next)
 
-	function next(err) {
-	  ++num_calls
+	  function next(err) {
+	    ++num_calls
 
-	  if (err) {
-	    return fin(err)
-	  }
+	    if (err) {
+	      return fin(err)
+	    }
 
-	  if (num_calls === 2) {
-	    return fin()
+	    if (num_calls === 2) {
+	      return fin()
+	    }
 	  }
 	}
+
+
+      	impl.call(this)
+	  .then(() => fin())
+	  .catch(fin)
       })
     })
 
