@@ -50,6 +50,7 @@
     "lodash.once": "4.1.1",
     "pg": "8.11.0",
     "seneca": "3.30.1",
+    "seneca-entity": "22.1.0",
     "seneca-msg-test": "3.4.0",
     "typescript": "4.8.3"
   }

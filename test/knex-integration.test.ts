@@ -23,18 +23,18 @@ describe('knex integration', () => {
 
     function MyTrxPlugin() {
       const trx_strategy = {
-	async startTrx() {
+	async startTrx(_seneca) {
 	  const trx = await knex.transaction()
 	  knex_trx = trx
 
 	  return trx
 	},
 
-	async commitTrx(trx) {
+	async commitTrx(_seneca, trx) {
 	  await trx.ctx.commit()
 	},
 
-	async rollbackTrx(trx) {
+	async rollbackTrx(_seneca, trx) {
 	  await trx.ctx.rollback()
 	}
       }

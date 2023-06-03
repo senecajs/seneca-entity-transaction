@@ -1,6 +1,7 @@
-import EntityTransaction from '..'
 const Seneca = require('seneca')
 const once = require('lodash.once')
+
+import EntityTransaction from '..'
 
 
 describe('entity-transaction', () => {
@@ -16,7 +17,7 @@ describe('entity-transaction', () => {
 
     function MyTrxPlugin() {
 	const trx_strategy = {
-	  async startTrx() {
+	  async startTrx(_seneca) {
 	    trx_handle = {
 	      name: "pretend I'm a T-Rex",
 	      async commit() {},
@@ -26,11 +27,11 @@ describe('entity-transaction', () => {
 	    return trx_handle
 	  },
 
-	  async commitTrx(trx) {
+	  async commitTrx(_seneca, trx) {
 	    await trx.ctx.commit()
 	  },
 
-	  async rollbackTrx(trx) {
+	  async rollbackTrx(_seneca, trx) {
 	    await trx.ctx.rollback()
 	  }
 	}
@@ -79,7 +80,7 @@ describe('entity-transaction', () => {
 
     function MyTrxPlugin() {
 	const trx_strategy = {
-	  async startTrx() {
+	  async startTrx(_seneca) {
 	    if (num_trxs === 0) {
 	      const trx_handle = makeExampleTrxHandle("pretend I'm a T-Rex")
 	      trx_handles.push(trx_handle)
@@ -102,12 +103,12 @@ describe('entity-transaction', () => {
 	  },
 
 
-	  async commitTrx(trx) {
+	  async commitTrx(_seneca, trx) {
 	    await trx.ctx.commit()
 	  },
 
 
-	  async rollbackTrx(trx) {
+	  async rollbackTrx(_seneca, trx) {
 	    await trx.ctx.rollback()
 	  }
 	}
@@ -341,6 +342,70 @@ describe('entity-transaction', () => {
 
       seneca.ready(function () {
 	this.act('hello:world', fin)
+      })
+    })
+  })
+
+
+  describe('this-ref inside the strategy instance', () => {
+    class UserStrategy {
+      constructor() {
+      	this.num_started = 0
+      	this.num_committed = 0
+      	this.num_rolledback = 0
+      }
+
+      startTrx() {
+      	this.num_started++
+      	return 'Pretend I am a T-Rex!'
+      }
+
+      commitTrx(trx) {
+      	this.num_committed++
+      }
+
+      rollbackTrx(trx) {
+      	this.num_rolledback++
+      }
+    }
+
+    const trx_strategy = new UserStrategy()
+
+
+    let trx_handle
+
+    function MyTrxPlugin() {
+	this.export('entity-transaction/registerStrategy')(trx_strategy)
+    }
+
+
+    test("it's easy for users to decorate their strategy instances with data and access that data", (fin_) => {
+      const fin = once(fin_)
+
+
+      const seneca = Seneca().test(fin)
+      seneca.use(EntityTransaction)
+      seneca.use(MyTrxPlugin)
+
+
+      seneca.ready(function () {
+      	async function impl() {
+	  const senecatx1 = await this.transaction().start()
+	  const senecatx2 = await this.transaction().start()
+	  const senecatx3 = await this.delegate().transaction().start()
+
+	  await senecatx1.transaction().commit()
+	  await senecatx2.transaction().rollback()
+	  await senecatx3.transaction().commit()
+
+	  expect(trx_strategy.num_started).toEqual(3)
+	  expect(trx_strategy.num_committed).toEqual(2)
+	  expect(trx_strategy.num_rolledback).toEqual(1)
+	}
+
+	impl.call(this)
+	  .then(() => fin())
+	  .catch(fin)
       })
     })
   })

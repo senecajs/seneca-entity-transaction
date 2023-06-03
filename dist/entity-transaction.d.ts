@@ -2,9 +2,9 @@ declare type Trx = {
     ctx: any;
 };
 interface TrxStrategy {
-    startTrx(): Promise<any>;
-    commitTrx(trx: Trx): Promise<any>;
-    rollbackTrx(trx: Trx): Promise<any>;
+    startTrx(seneca: any): Promise<any>;
+    commitTrx(seneca: any, trx: Trx): Promise<any>;
+    rollbackTrx(seneca: any, trx: Trx): Promise<any>;
 }
 declare function entity_transaction(this: any): {
     name: string;
