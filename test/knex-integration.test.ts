@@ -1,5 +1,7 @@
-import EntityTransaction from '..'
 import Knex from 'knex'
+import EntityTransaction from '..'
+import PgTestDbConfig from './support/pg/config.ts'
+
 const Seneca = require('seneca')
 const once = require('lodash.once')
 
@@ -8,16 +10,7 @@ describe('knex integration', () => {
   let knex
 
   beforeAll(() => {
-    knex = Knex({
-      client: 'pg',
-      connection: {
-	host: '0.0.0.0',
-	port: 5432,
-	user: 'postgres',
-	password: 'postgres',
-	database: 'senecatest'
-      }
-    })
+    knex = Knex(PgTestDbConfig)
   })
 
   afterAll(async () => {
