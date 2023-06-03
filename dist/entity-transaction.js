@@ -7,7 +7,7 @@ class TrxApi {
         this.strategy = args.strategy;
     }
     async start() {
-        const ctx = await this.strategy.startTrx.call(this.seneca);
+        const ctx = await this.strategy.startTrx.call(0);
         const trx = {
             ctx
         };
@@ -22,11 +22,11 @@ class TrxApi {
     }
     async commit() {
         const trx = tryRetrieveTrxInfo(this.seneca);
-        await this.strategy.commitTrx.call(this.seneca, trx);
+        await this.strategy.commitTrx.call(0, trx);
     }
     async rollback() {
         const trx = tryRetrieveTrxInfo(this.seneca);
-        await this.strategy.rollbackTrx.call(this.seneca, trx);
+        await this.strategy.rollbackTrx.call(0, trx);
     }
 }
 function tryRetrieveTrxInfo(seneca) {
