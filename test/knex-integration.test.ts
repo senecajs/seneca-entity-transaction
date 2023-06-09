@@ -24,10 +24,10 @@ describe('knex integration', () => {
     function MyTrxPlugin() {
       const trx_strategy = {
 	async startTrx(_seneca) {
-	  const trx = await knex.transaction()
-	  knex_trx = trx
+	  const handle = await knex.transaction()
+	  knex_trx = handle
 
-	  return trx
+	  return handle
 	},
 
 	async commitTrx(_seneca, trx) {
@@ -816,6 +816,231 @@ describe('knex integration', () => {
 	seneca.ready(function () {
 	  this.act('hello:world', fin)
 	})
+      })
+    })
+  })
+
+  describe('example integration using the commit-only-if-owner strategy', () => {
+    let knex_trx
+
+    function MyTrxPlugin() {
+      const trx_strategy = {
+	async startTrx(seneca) {
+	  const existing_trx = tryRetrieveTrxInfo(seneca)
+
+	  if (existing_trx) {
+	    return {
+	      ...existing_trx.ctx,
+	      is_child: true
+	    }
+	  }
+
+	  const handle = await knex.transaction()
+	  knex_trx = handle
+
+	  return {
+	    handle,
+	    is_child: false
+	  }
+	},
+
+	async commitTrx(seneca, trx) {
+	  if (trx.ctx.is_child) {
+	    return
+	  }
+
+	  await trx.ctx.handle.commit()
+	},
+
+	async rollbackTrx(seneca, trx) {
+	  throw new Error('not implemented')
+	}
+      }
+
+      this.export('entity-transaction/registerStrategy')(trx_strategy)
+    }
+
+    function tryRetrieveTrxInfo(seneca) {
+      return seneca.fixedmeta?.custom?.entity_transaction?.trx
+    }
+
+
+    beforeEach(async () => {
+      await knex('seneca_users').delete()
+    })
+
+
+    test('works ok', (fin_) => {
+      const fin = once(fin_)
+
+      const seneca = Seneca().test(fin)
+      seneca.use(EntityTransaction)
+      seneca.use(MyTrxPlugin)
+
+      seneca.ready(function () {
+      	async function impl() {
+	  expect(await countRecords(knex('seneca_users'))).toEqual(0)
+
+	  const senecatrx = await this.transaction().start()
+
+	  await knex_trx('seneca_users').insert({
+	    username: 'bob456',
+	    email: 'bob@example.com'
+	  })
+
+	  await senecatrx.transaction().commit()
+
+	  expect(await countRecords(knex('seneca_users'))).toEqual(1)
+	}
+
+	impl.call(this)
+	  .then(fin)
+	  .catch(fin)
+      })
+    })
+
+    test('works ok with priors', (fin_) => {
+      const fin = once(fin_)
+
+      const seneca = Seneca().test(fin)
+      seneca.use(EntityTransaction)
+      seneca.use(MyTrxPlugin)
+
+
+      seneca.add('hello:world', function (msg, reply) {
+	async function impl() {
+	  const senecatrx = await this.transaction().start()
+
+	  await knex_trx('seneca_users').insert({
+	    username: 'bob456',
+	    email: 'bob@example.com'
+	  })
+
+	  await senecatrx.transaction().commit()
+	}
+
+	impl.call(this)
+	  .then(() => reply())
+	  .catch(reply)
+      })
+
+
+      seneca.add('hello:world', function (msg, reply) {
+	async function impl() {
+	  expect(await countRecords(knex('seneca_users'))).toEqual(0)
+
+	  const senecatrx = await this.transaction().start()
+
+	  await knex_trx('seneca_users').insert({
+	    username: 'alice123',
+	    email: 'alice@example.com'
+	  })
+
+	  await new Promise((resolve, reject) => {
+	    senecatrx.prior(msg, function (err) {
+	      if (err) return reject(err)
+
+	      async function impl() {
+		expect(await countRecords(knex('seneca_users'))).toEqual(0)
+
+		await knex_trx('seneca_users').insert({
+		  username: 'charlie789',
+		  email: 'charlie@example.com'
+		})
+	      }
+
+	      impl.call(this)
+		.then(resolve)
+		.catch(reject)
+	    })
+	  })
+
+	  await senecatrx.transaction().commit()
+
+	  expect(await countRecords(knex('seneca_users'))).toEqual(3)
+	}
+
+	impl.call(this)
+	  .then(() => reply())
+	  .catch(reply)
+      })
+
+
+      seneca.ready(function () {
+	this.act('hello:world', fin)
+      })
+    })
+
+    test("won't get fooled by double-commits", (fin_) => {
+      const fin = once(fin_)
+
+      const seneca = Seneca().test(fin)
+      seneca.use(EntityTransaction)
+      seneca.use(MyTrxPlugin)
+
+
+      seneca.add('hello:world', function (msg, reply) {
+	async function impl() {
+	  const senecatrx = await this.transaction().start()
+
+	  await knex_trx('seneca_users').insert({
+	    username: 'bob456',
+	    email: 'bob@example.com'
+	  })
+
+	  await senecatrx.transaction().commit()
+	  await senecatrx.transaction().commit()
+	}
+
+	impl.call(this)
+	  .then(() => reply())
+	  .catch(reply)
+      })
+
+
+      seneca.add('hello:world', function (msg, reply) {
+	async function impl() {
+	  expect(await countRecords(knex('seneca_users'))).toEqual(0)
+
+	  const senecatrx = await this.transaction().start()
+
+	  await knex_trx('seneca_users').insert({
+	    username: 'alice123',
+	    email: 'alice@example.com'
+	  })
+
+	  await new Promise((resolve, reject) => {
+	    senecatrx.prior(msg, function (err) {
+	      if (err) return reject(err)
+
+	      async function impl() {
+		expect(await countRecords(knex('seneca_users'))).toEqual(0)
+
+		await knex_trx('seneca_users').insert({
+		  username: 'charlie789',
+		  email: 'charlie@example.com'
+		})
+	      }
+
+	      impl.call(this)
+		.then(resolve)
+		.catch(reject)
+	    })
+	  })
+
+	  await senecatrx.transaction().commit()
+
+	  expect(await countRecords(knex('seneca_users'))).toEqual(3)
+	}
+
+	impl.call(this)
+	  .then(() => reply())
+	  .catch(reply)
+      })
+
+
+      seneca.ready(function () {
+	this.act('hello:world', fin)
       })
     })
   })
