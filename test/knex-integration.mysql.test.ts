@@ -1,6 +1,6 @@
 import Knex from 'knex'
 import EntityTransaction from '..'
-import PgTestDbConfig from './support/pg/config.ts'
+import MysqlTestDbConfig from './support/mysql/config.ts'
 
 const Seneca = require('seneca')
 const once = require('lodash.once')
@@ -10,7 +10,7 @@ describe('knex integration', () => {
   let knex
 
   beforeAll(() => {
-    knex = Knex(PgTestDbConfig)
+    knex = Knex(MysqlTestDbConfig)
   })
 
   afterAll((fin) => {
@@ -1048,7 +1048,7 @@ describe('knex integration', () => {
 
 
 async function countRecords(knex) {
-  const c = await knex.count().first()
+  const c = await knex.count('id', { as: 'count' }).first()
   return Number(c.count)
 }
 
