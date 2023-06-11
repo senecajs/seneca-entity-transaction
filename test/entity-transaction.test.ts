@@ -258,6 +258,81 @@ describe('entity-transaction', () => {
     })
 
 
+    test('commits the correct trx (test 3)', (fin_) => {
+      const fin = once(fin_)
+
+
+      const seneca = Seneca().test(fin)
+      seneca.use(EntityTransaction)
+      seneca.use(MyTrxPlugin)
+
+
+      let commit_spy_helloworld
+      let commit_spy_bonjourmonde
+
+
+      seneca.add('bonjour:monde', function (msg, reply) {
+      	async function impl() {
+	  const senecatrx = await this.transaction().start()
+
+	  if (trx_handles.length !== 2) {
+	    throw new Error("There is something wrong with this test's setup." +
+	      ' The test expected that there be exactly two trx handles available.')
+	  }
+
+      	  commit_spy_bonjourmonde = jest.spyOn(trx_handles[1], 'commit')
+
+	  await senecatrx.transaction().commit()
+	}
+
+	impl.call(this)
+	  .then(() => reply())
+	  .catch(reply)
+      })
+
+
+      seneca.add('hello:world', function (msg, reply) {
+      	async function impl() {
+	  const senecatrx = await this.transaction().start()
+
+	  if (trx_handles.length !== 1) {
+	    throw new Error("There is something wrong with this test's setup." +
+	      ' At this point the test expected that there be exactly one trx handle available.')
+	  }
+
+      	  commit_spy_helloworld = jest.spyOn(trx_handles[0], 'commit')
+
+
+	  await new Promise((resolve, reject) => {
+	    senecatrx.act('bonjour:monde', function (err) {
+	      if (err) return reject(err)
+	      resolve()
+	    })
+	  })
+
+	  expect(commit_spy_helloworld.mock.calls.length).toEqual(0)
+	  expect(commit_spy_bonjourmonde.mock.calls.length).toEqual(1)
+
+
+	  await senecatrx.transaction().commit()
+
+	  expect(commit_spy_helloworld.mock.calls.length).toEqual(1)
+	  expect(commit_spy_bonjourmonde.mock.calls.length).toEqual(1)
+	}
+
+
+	impl.call(this)
+	  .then(() => reply())
+	  .catch(reply)
+      })
+
+
+      seneca.ready(function () {
+	this.act('hello:world', fin)
+      })
+    })
+
+
     test('rolls back the correct trx (test 1)', (fin_) => {
       const fin = once(fin_)
 
@@ -338,6 +413,81 @@ describe('entity-transaction', () => {
 
 	  expect(rollback_spy1.mock.calls.length).toEqual(1)
 	  expect(rollback_spy2.mock.calls.length).toEqual(1)
+	}
+
+
+	impl.call(this)
+	  .then(() => reply())
+	  .catch(reply)
+      })
+
+
+      seneca.ready(function () {
+	this.act('hello:world', fin)
+      })
+    })
+
+
+    test('rolls back the correct trx (test 3)', (fin_) => {
+      const fin = once(fin_)
+
+
+      const seneca = Seneca().test(fin)
+      seneca.use(EntityTransaction)
+      seneca.use(MyTrxPlugin)
+
+
+      let rollback_spy_helloworld
+      let rollback_spy_bonjourmonde
+
+
+      seneca.add('bonjour:monde', function (msg, reply) {
+      	async function impl() {
+	  const senecatrx = await this.transaction().start()
+
+	  if (trx_handles.length !== 2) {
+	    throw new Error("There is something wrong with this test's setup." +
+	      ' The test expected that there be exactly two trx handles available.')
+	  }
+
+      	  rollback_spy_bonjourmonde = jest.spyOn(trx_handles[1], 'rollback')
+
+	  await senecatrx.transaction().rollback()
+	}
+
+	impl.call(this)
+	  .then(() => reply())
+	  .catch(reply)
+      })
+
+
+      seneca.add('hello:world', function (msg, reply) {
+      	async function impl() {
+	  const senecatrx = await this.transaction().start()
+
+	  if (trx_handles.length !== 1) {
+	    throw new Error("There is something wrong with this test's setup." +
+	      ' At this point the test expected that there be exactly one trx handle available.')
+	  }
+
+      	  rollback_spy_helloworld = jest.spyOn(trx_handles[0], 'rollback')
+
+
+	  await new Promise((resolve, reject) => {
+	    senecatrx.act('bonjour:monde', function (err) {
+	      if (err) return reject(err)
+	      resolve()
+	    })
+	  })
+
+	  expect(rollback_spy_helloworld.mock.calls.length).toEqual(0)
+	  expect(rollback_spy_bonjourmonde.mock.calls.length).toEqual(1)
+
+
+	  await senecatrx.transaction().rollback()
+
+	  expect(rollback_spy_helloworld.mock.calls.length).toEqual(1)
+	  expect(rollback_spy_bonjourmonde.mock.calls.length).toEqual(1)
 	}
 
 
