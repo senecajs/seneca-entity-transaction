@@ -14,8 +14,8 @@ describe('example store integration', () => {
     knex = Knex(PgTestDbConfig)
   })
 
-  afterAll(async () => {
-    await knex.destroy()
+  afterAll((fin) => {
+    knex.destroy(fin)
   })
 
 
@@ -126,7 +126,7 @@ describe('example store integration', () => {
 	}
       })
 
-      seneca.ready(async function () {
+      seneca.ready(function () {
 	async function impl() {
 	  expect(await countRecords(knex('seneca_users'))).toEqual(0)
 	  const senecatrx = await this.transaction().start()
@@ -166,7 +166,7 @@ describe('example store integration', () => {
 	}
       })
 
-      seneca.ready(async function () {
+      seneca.ready(function () {
 	async function impl() {
 	  expect(await countRecords(knex('seneca_users'))).toEqual(0)
 	  const senecatrx = await this.transaction().start()
@@ -205,7 +205,7 @@ describe('example store integration', () => {
 	}
       })
 
-      seneca.ready(async function () {
+      seneca.ready(function () {
 	async function impl() {
 	  expect(await countRecords(knex('seneca_users'))).toEqual(0)
 
@@ -294,7 +294,7 @@ describe('example store integration', () => {
 	}
       })
 
-      seneca.ready(async function () {
+      seneca.ready(function () {
 	async function impl() {
 	  expect(await countRecords(knex('seneca_users'))).toEqual(0)
 

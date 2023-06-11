@@ -1,4 +1,6 @@
 module.exports = {
+  verbose: true,
+  randomize: false,
   transform: {
     "^.+\\.tsx?$": ["esbuild-jest", {sourcemap:true}]
   },

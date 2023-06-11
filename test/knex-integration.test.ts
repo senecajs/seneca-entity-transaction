@@ -13,8 +13,8 @@ describe('knex integration', () => {
     knex = Knex(PgTestDbConfig)
   })
 
-  afterAll(async () => {
-    await knex.destroy()
+  afterAll((fin) => {
+    knex.destroy(fin)
   })
 
 

@@ -19,9 +19,9 @@
     "url": "git@github.com:senecajs/seneca-entity-transaction.git"
   },
   "scripts": {
-    "test": "jest --coverage",
-    "test-some": "jest -t",
-    "test-watch": "jest --coverage --watchAll",
+    "test": "jest --coverage --runInBand",
+    "test-some": "jest --runInBand -t",
+    "test-watch": "jest --coverage --watchAll --runInBand",
     "watch": "tsc -w -d",
     "build": "tsc -d",
     "clean": "rm -rf node_modules yarn.lock package-lock.json",
