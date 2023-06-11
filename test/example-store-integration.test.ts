@@ -230,7 +230,7 @@ describe('example store integration', () => {
     })
 
 
-    test('nested trxs are committed correctly', (fin_) => {
+    test('nested trxs are handled correctly', (fin_) => {
       const fin = once(fin_)
 
       const seneca = Seneca().test(fin)
@@ -267,6 +267,58 @@ describe('example store integration', () => {
 
 	  await senecatrx_child.transaction().rollback()
 	  await senecatrx.transaction().commit()
+
+      	  expect(await countRecords(knex('seneca_users'))).toEqual(1)
+	}
+
+	impl.call(this)
+	  .then(() => reply())
+	  .catch(reply)
+      })
+
+      seneca.ready(function () {
+      	this.act('hello:world', fin)
+      })
+    })
+
+
+    test('parallel trxs are handled correctly', (fin_) => {
+      const fin = once(fin_)
+
+      const seneca = Seneca().test(fin)
+      seneca.use(SenecaEntity)
+      seneca.use(EntityTransaction)
+
+      seneca.use(MyPreciousStorePlugin, {
+	getKnex() {
+	  return knex
+	}
+      })
+
+
+      seneca.add('hello:world', function (msg, reply) {
+      	async function impl() {
+      	  expect(await countRecords(knex('seneca_users'))).toEqual(0)
+
+
+	  const senecatrx1 = await this.transaction().start()
+
+	  await saveUser(senecatrx1, {
+	    username: 'alice123',
+	    email: 'alice@example.com'
+	  })
+
+
+	  const senecatrx2 = await this.transaction().start()
+
+	  await saveUser(senecatrx2, {
+	    username: 'bob456',
+	    email: 'bob@example.com'
+	  })
+
+
+	  await senecatrx2.transaction().rollback()
+	  await senecatrx1.transaction().commit()
 
       	  expect(await countRecords(knex('seneca_users'))).toEqual(1)
 	}
