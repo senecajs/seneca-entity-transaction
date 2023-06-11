@@ -228,6 +228,58 @@ describe('example store integration', () => {
 	  .catch(fin)
       })
     })
+
+
+    test('nested trxs are committed correctly', (fin_) => {
+      const fin = once(fin_)
+
+      const seneca = Seneca().test(fin)
+      seneca.use(SenecaEntity)
+      seneca.use(EntityTransaction)
+
+      seneca.use(MyPreciousStorePlugin, {
+	getKnex() {
+	  return knex
+	}
+      })
+
+
+      seneca.add('hello:world', function (msg, reply) {
+      	async function impl() {
+      	  expect(await countRecords(knex('seneca_users'))).toEqual(0)
+
+
+	  const senecatrx = await this.transaction().start()
+
+	  await saveUser(senecatrx, {
+	    username: 'alice123',
+	    email: 'alice@example.com'
+	  })
+
+
+	  const senecatrx_child = await senecatrx.transaction().start()
+
+	  await saveUser(senecatrx_child, {
+	    username: 'bob456',
+	    email: 'bob@example.com'
+	  })
+
+
+	  await senecatrx_child.transaction().rollback()
+	  await senecatrx.transaction().commit()
+
+      	  expect(await countRecords(knex('seneca_users'))).toEqual(1)
+	}
+
+	impl.call(this)
+	  .then(() => reply())
+	  .catch(reply)
+      })
+
+      seneca.ready(function () {
+      	this.act('hello:world', fin)
+      })
+    })
   })
 
   describe('example store without integration', () => {
