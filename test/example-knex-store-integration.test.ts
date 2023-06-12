@@ -339,6 +339,195 @@ describe('example knex store integration', () => {
     })
 
 
+    test('nested trxs with priors, start-start-commit-rollback', (fin_) => {
+      const fin = once(fin_)
+
+      const seneca = Seneca().test(fin)
+      seneca.use(SenecaEntity)
+      seneca.use(EntityTransaction)
+
+      seneca.use(MyKnexStorePlugin, {
+	getKnex() {
+	  return knex
+	}
+      })
+
+
+      seneca.add('hello:world', function (msg, reply) {
+	async function impl() {
+	  const senecatrx_child = await this.transaction().start()
+
+	  await saveUser(senecatrx_child, {
+	    username: 'bob456',
+	    email: 'bob@example.com'
+	  })
+
+	  await senecatrx_child.transaction().commit()
+	}
+
+	impl.call(this)
+	  .then(() => reply())
+	  .catch(reply)
+      })
+
+      seneca.add('hello:world', function (msg, reply) {
+	async function impl() {
+	  expect(await countRecords(knex('seneca_users'))).toEqual(0)
+
+
+	  const senecatrx = await this.transaction().start()
+
+	  await saveUser(senecatrx, {
+	    username: 'alice123',
+	    email: 'alice@example.com'
+	  })
+
+	  await new Promise((resolve, reject) => {
+	    senecatrx.prior(msg, function (err) {
+	      if (err) return reject(err)
+	      resolve()
+	    })
+	  })
+
+	  await senecatrx.transaction().rollback()
+
+	  expect(await countRecords(knex('seneca_users'))).toEqual(0)
+	}
+
+
+	impl.call(this)
+	  .then(() => reply())
+	  .catch(reply)
+      })
+
+      seneca.ready(function () {
+	this.act('hello:world', fin)
+      })
+    })
+
+
+    test('nested trxs, start-start-rollback-commit', (fin_) => {
+      const fin = once(fin_)
+
+      const seneca = Seneca().test(fin)
+      seneca.use(SenecaEntity)
+      seneca.use(EntityTransaction)
+
+      seneca.use(MyKnexStorePlugin, {
+	getKnex() {
+	  return knex
+	}
+      })
+
+
+      seneca.add('hello:world', function (msg, reply) {
+	async function impl() {
+	  expect(await countRecords(knex('seneca_users'))).toEqual(0)
+
+
+	  const senecatrx = await this.transaction().start()
+
+	  await saveUser(senecatrx, {
+	    username: 'alice123',
+	    email: 'alice@example.com'
+	  })
+
+	  const senecatrx_child = await senecatrx.transaction().start()
+
+	  await saveUser(senecatrx_child, {
+	    username: 'bob456',
+	    email: 'bob@example.com'
+	  })
+
+	  await senecatrx_child.transaction().rollback()
+	  await senecatrx.transaction().commit()
+
+	  expect(await countRecords(knex('seneca_users'))).toEqual(1)
+
+	  const user = await knex('seneca_users').first()
+	  expect(user.username).toEqual('alice123')
+	}
+
+	impl.call(this)
+	  .then(() => reply())
+	  .catch(reply)
+      })
+
+      seneca.ready(function () {
+	this.act('hello:world', fin)
+      })
+    })
+
+
+    test('nested trxs with priors, start-start-rollback-commit', (fin_) => {
+      const fin = once(fin_)
+
+      const seneca = Seneca().test(fin)
+      seneca.use(SenecaEntity)
+      seneca.use(EntityTransaction)
+
+      seneca.use(MyKnexStorePlugin, {
+	getKnex() {
+	  return knex
+	}
+      })
+
+
+      seneca.add('hello:world', function (msg, reply) {
+      	async function impl() {
+	  const senecatrx_child = await this.transaction().start()
+
+	  await saveUser(senecatrx_child, {
+	    username: 'bob456',
+	    email: 'bob@example.com'
+	  })
+
+	  await senecatrx_child.transaction().rollback()
+	}
+
+	impl.call(this)
+	  .then(() => reply())
+	  .catch(reply)
+      })
+
+      seneca.add('hello:world', function (msg, reply) {
+	async function impl() {
+	  expect(await countRecords(knex('seneca_users'))).toEqual(0)
+
+
+	  const senecatrx = await this.transaction().start()
+
+	  await saveUser(senecatrx, {
+	    username: 'alice123',
+	    email: 'alice@example.com'
+	  })
+
+	  await new Promise((resolve, reject) => {
+	    senecatrx.prior(msg, function (err) {
+	      if (err) return reject(err)
+	      resolve()
+	    })
+	  })
+
+	  await senecatrx.transaction().commit()
+
+	  expect(await countRecords(knex('seneca_users'))).toEqual(1)
+
+	  const user = await knex('seneca_users').first()
+	  expect(user.username).toEqual('alice123')
+	}
+
+	impl.call(this)
+	  .then(() => reply())
+	  .catch(reply)
+      })
+
+      seneca.ready(function () {
+	this.act('hello:world', fin)
+      })
+    })
+
+
     test('parallel trxs are handled correctly', (fin_) => {
       const fin = once(fin_)
 
@@ -709,6 +898,261 @@ describe('example knex store integration', () => {
 
       seneca.ready(function () {
       	this.act('hello:world', fin)
+      })
+    })
+
+
+    test('trx is carried over via a prior stack (rollback test)', (fin_) => {
+      const fin = once(fin_)
+
+      const seneca = Seneca().test(fin)
+      seneca.use(SenecaEntity)
+      seneca.use(EntityTransaction)
+
+      seneca.use(MyKnexStorePlugin, {
+	getKnex() {
+	  return knex
+	}
+      })
+
+
+      seneca.add('hello:world', function (msg, reply) {
+	async function impl() {
+	  await saveUser(this, {
+	    username: 'bob456',
+	    email: 'bob@example.com'
+	  })
+	}
+
+	impl.call(this)
+	  .then(() => reply())
+	  .catch(reply)
+      })
+
+      seneca.add('hello:world', function (msg, reply) {
+	async function impl() {
+	  expect(await countRecords(knex('seneca_users'))).toEqual(0)
+	  const senecatrx = await this.transaction().start()
+
+	  await saveUser(senecatrx, {
+	    username: 'alice123',
+	    email: 'alice@example.com'
+	  })
+
+	  await new Promise((resolve, reject) => {
+	    senecatrx.prior(msg, function (err) {
+	      if (err) return reject(err)
+	      resolve()
+	    })
+	  })
+
+	  await saveUser(senecatrx, {
+	    username: 'charlie456',
+	    email: 'charlie@example.com'
+	  })
+
+	  await senecatrx.transaction().rollback()
+	  expect(await countRecords(knex('seneca_users'))).toEqual(0)
+	}
+
+	impl.call(this)
+	  .then(() => reply())
+	  .catch(reply)
+      })
+
+      seneca.ready(function () {
+      	seneca.act('hello:world', fin)
+      })
+    })
+
+
+    test('trx is carried over via a prior stack (commit test)', (fin_) => {
+      const fin = once(fin_)
+
+      const seneca = Seneca().test(fin)
+      seneca.use(SenecaEntity)
+      seneca.use(EntityTransaction)
+
+      seneca.use(MyKnexStorePlugin, {
+	getKnex() {
+	  return knex
+	}
+      })
+
+
+      seneca.add('hello:world', function (msg, reply) {
+	async function impl() {
+	  await saveUser(this, {
+	    username: 'bob456',
+	    email: 'bob@example.com'
+	  })
+	}
+
+	impl.call(this)
+	  .then(() => reply())
+	  .catch(reply)
+      })
+
+      seneca.add('hello:world', function (msg, reply) {
+	async function impl() {
+	  expect(await countRecords(knex('seneca_users'))).toEqual(0)
+	  const senecatrx = await this.transaction().start()
+
+	  await saveUser(senecatrx, {
+	    username: 'alice123',
+	    email: 'alice@example.com'
+	  })
+
+	  await new Promise((resolve, reject) => {
+	    senecatrx.prior(msg, function (err) {
+	      if (err) return reject(err)
+	      resolve()
+	    })
+	  })
+
+	  await saveUser(senecatrx, {
+	    username: 'charlie456',
+	    email: 'charlie@example.com'
+	  })
+
+	  await senecatrx.transaction().commit()
+	  expect(await countRecords(knex('seneca_users'))).toEqual(3)
+	}
+
+	impl.call(this)
+	  .then(() => reply())
+	  .catch(reply)
+      })
+
+      seneca.ready(function () {
+      	seneca.act('hello:world', fin)
+      })
+    })
+
+
+    test('trx is carried over to a subhandler (rollback test)', (fin_) => {
+      const fin = once(fin_)
+
+      const seneca = Seneca().test(fin)
+      seneca.use(SenecaEntity)
+      seneca.use(EntityTransaction)
+
+      seneca.use(MyKnexStorePlugin, {
+	getKnex() {
+	  return knex
+	}
+      })
+
+
+      seneca.add('bonjour:monde', function (msg, reply) {
+	async function impl() {
+	  await saveUser(this, {
+	    username: 'bob456',
+	    email: 'bob@example.com'
+	  })
+	}
+
+	impl.call(this)
+	  .then(() => reply())
+	  .catch(reply)
+      })
+
+      seneca.add('hello:world', function (msg, reply) {
+	async function impl() {
+	  expect(await countRecords(knex('seneca_users'))).toEqual(0)
+	  const senecatrx = await this.transaction().start()
+
+	  await saveUser(senecatrx, {
+	    username: 'alice123',
+	    email: 'alice@example.com'
+	  })
+
+	  await new Promise((resolve, reject) => {
+	    senecatrx.act('bonjour:monde', function (err) {
+	      if (err) return reject(err)
+	      resolve()
+	    })
+	  })
+
+	  await saveUser(senecatrx, {
+	    username: 'charlie456',
+	    email: 'charlie@example.com'
+	  })
+
+	  await senecatrx.transaction().rollback()
+	  expect(await countRecords(knex('seneca_users'))).toEqual(0)
+	}
+
+	impl.call(this)
+	  .then(() => reply())
+	  .catch(reply)
+      })
+
+      seneca.ready(function () {
+      	seneca.act('hello:world', fin)
+      })
+    })
+
+    test('trx is carried over to a subhandler (commit test)', (fin_) => {
+      const fin = once(fin_)
+
+      const seneca = Seneca().test(fin)
+      seneca.use(SenecaEntity)
+      seneca.use(EntityTransaction)
+
+      seneca.use(MyKnexStorePlugin, {
+	getKnex() {
+	  return knex
+	}
+      })
+
+
+      seneca.add('bonjour:monde', function (msg, reply) {
+	async function impl() {
+	  await saveUser(this, {
+	    username: 'bob456',
+	    email: 'bob@example.com'
+	  })
+	}
+
+	impl.call(this)
+	  .then(() => reply())
+	  .catch(reply)
+      })
+
+      seneca.add('hello:world', function (msg, reply) {
+	async function impl() {
+	  expect(await countRecords(knex('seneca_users'))).toEqual(0)
+	  const senecatrx = await this.transaction().start()
+
+	  await saveUser(senecatrx, {
+	    username: 'alice123',
+	    email: 'alice@example.com'
+	  })
+
+	  await new Promise((resolve, reject) => {
+	    senecatrx.act('bonjour:monde', function (err) {
+	      if (err) return reject(err)
+	      resolve()
+	    })
+	  })
+
+	  await saveUser(senecatrx, {
+	    username: 'charlie456',
+	    email: 'charlie@example.com'
+	  })
+
+	  await senecatrx.transaction().commit()
+	  expect(await countRecords(knex('seneca_users'))).toEqual(3)
+	}
+
+	impl.call(this)
+	  .then(() => reply())
+	  .catch(reply)
+      })
+
+      seneca.ready(function () {
+      	seneca.act('hello:world', fin)
       })
     })
   })
