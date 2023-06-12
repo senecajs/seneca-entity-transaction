@@ -29,7 +29,7 @@ class TrxApi {
   async start() {
     const ctx = await this.strategy.startTrx(this.seneca)
 
-    const trx: Trx = {
+    let trx: Trx = {
       ctx
     }
 

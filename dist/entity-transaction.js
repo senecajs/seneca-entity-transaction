@@ -8,7 +8,7 @@ class TrxApi {
     }
     async start() {
         const ctx = await this.strategy.startTrx(this.seneca);
-        const trx = {
+        let trx = {
             ctx
         };
         const seneca_trx = this.seneca.delegate(null, {

@@ -18,6 +18,11 @@ describe('knex integration', () => {
   })
 
 
+  beforeEach(async () => {
+    await knex('seneca_users').delete()
+  })
+
+
   describe('example integration', () => {
     let knex_trx
 
@@ -41,11 +46,6 @@ describe('knex integration', () => {
 
       this.export('entity-transaction/registerStrategy')(trx_strategy)
     }
-
-
-    beforeEach(async () => {
-      await knex('seneca_users').delete()
-    })
 
 
     test('trx started and committed in the same handler', (fin_) => {
@@ -865,11 +865,6 @@ describe('knex integration', () => {
     }
 
 
-    beforeEach(async () => {
-      await knex('seneca_users').delete()
-    })
-
-
     test('works ok', (fin_) => {
       const fin = once(fin_)
 
@@ -1043,6 +1038,35 @@ describe('knex integration', () => {
 	this.act('hello:world', fin)
       })
     })
+  })
+
+
+  test('__dbg', (fin) => {
+    async function impl() {
+      const trx = await knex.transaction()
+
+      await trx('seneca_users').insert({
+	username: 'alice',
+	email: 'alice@example.com'
+      })
+
+      const trx_child = await trx.transaction()
+
+      await trx_child('seneca_users').insert({
+	username: 'bob',
+	email: 'bob@example.com'
+      })
+
+      await trx_child.rollback()
+
+      await trx.commit()
+
+      expect(await countRecords(knex('seneca_users'))).toEqual(1)
+    }
+
+    impl()
+      .then(fin)
+      .catch(fin)
   })
 })
 
