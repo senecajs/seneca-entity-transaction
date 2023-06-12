@@ -32,7 +32,10 @@ class TrxApi {
     // clients and passing them to users, the users are able to leverage their db client's
     // management for nested transactions.
     //
-    const pending_trx = Intern.tryGetPendingTrx(this.seneca) ?? null 
+    // TODO: This should probably walk the whole delegation chain in search of a pending trx.
+    // Not yet sure.
+    //
+    const pending_trx = Intern.tryGetPendingTrxOfDelegateOrParentInstance(this.seneca) ?? null 
 
     const ctx = await this.strategy.startTrx(this.seneca, pending_trx)
 
@@ -105,7 +108,7 @@ class Intern {
     return seneca.fixedmeta?.custom?.entity_transaction ?? null
   }
 
-  static tryGetPendingTrx(seneca: any) {
+  static tryGetPendingTrxOfDelegateOrParentInstance(seneca: any) {
     // NOTE: If current_pending is not null, then it means the user is trying to start
     // a nested transaction, e.g.:
     // ```
@@ -170,12 +173,34 @@ function entity_transaction(this: any) {
     strategy = strategy_
   }
 
+  function tryGetPendingTrx(seneca: any) {
+    // TODO: Test this.
+    //
+    // TODO: QUESTION: Is it OK we are returning parent trx? E.g.:
+    // ```
+    //   const senecatrx = await this.transaction().start()
+    //
+    //   const nestedtrx = await senecatrx.transaction().start()
+    //   await nestedtrx.entity('users').data$(alice).save$() // uses nestedtrx trx
+    //   await nestedtrx.transaction().commit()
+    //
+    //   await nestedtrx.entity('users').data$(bob).save$() // uses senecatrx trx
+    //
+    //   await senecatrx.transaction().commit()
+    // ```
+    // See what knex does in a similar situation (it probably throws an error)
+    //
+    return Intern.tryGetPendingTrxOfDelegateOrParentInstance(this.seneca)?.trx ?? null
+  }
+
 
   return {
     name: 'entity-transaction',
 
     exports: {
-      registerStrategy
+      // TODO: move these functions it under the `api` namespace
+      registerStrategy,
+      tryGetPendingTrx
     }
   }
 }
