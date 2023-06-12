@@ -33,27 +33,20 @@ class TrxApi {
     }
     async commit() {
         const trx = Intern.tryGetTrx(this.seneca);
-        /* TODO
         if (!trx) {
-          throw new Error()
+            throw new Error('There is no transaction to commit, - did you forget to start one?');
         }
-        */
         await this.strategy.commitTrx(this.seneca, trx);
     }
     async rollback() {
         const trx = Intern.tryGetTrx(this.seneca);
-        /* TODO
         if (!trx) {
-          throw new Error()
+            throw new Error('There is no transaction to rollback, - did you forget to start one?');
         }
-        */
         await this.strategy.rollbackTrx(this.seneca, trx);
     }
 }
 class Intern {
-    static getParentOfDelegate(seneca) {
-        return Object.getPrototypeOf(seneca);
-    }
     static tryGetTrx(seneca) {
         var _a, _b, _c;
         return (_c = (_b = (_a = seneca.fixedmeta) === null || _a === void 0 ? void 0 : _a.custom) === null || _b === void 0 ? void 0 : _b.entity_transaction) === null || _c === void 0 ? void 0 : _c.trx;
@@ -110,9 +103,10 @@ function entity_transaction() {
     return {
         name: 'entity-transaction',
         exports: {
-            // TODO: move these functions it under the `api` namespace
-            registerStrategy,
-            //tryGetPendingTrx
+            integration: {
+                registerStrategy,
+                tryGetTrx: Intern.tryGetTrx
+            }
         }
     };
 }

@@ -6,10 +6,16 @@ interface TrxStrategy {
     commitTrx(seneca: any, trx: Trx): Promise<any>;
     rollbackTrx(seneca: any, trx: Trx): Promise<any>;
 }
+declare class Intern {
+    static tryGetTrx(seneca: any): any;
+}
 declare function entity_transaction(this: any): {
     name: string;
     exports: {
-        registerStrategy: (strategy_?: TrxStrategy) => void;
+        integration: {
+            registerStrategy: (strategy_?: TrxStrategy) => void;
+            tryGetTrx: typeof Intern.tryGetTrx;
+        };
     };
 };
 declare namespace entity_transaction {

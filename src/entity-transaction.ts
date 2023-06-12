@@ -57,11 +57,9 @@ class TrxApi {
   async commit() {
     const trx = Intern.tryGetTrx(this.seneca)
 
-    /* TODO
     if (!trx) {
-      throw new Error()
+      throw new Error('There is no transaction to commit, - did you forget to start one?')
     }
-    */
 
     await this.strategy.commitTrx(this.seneca, trx)
   }
@@ -69,11 +67,9 @@ class TrxApi {
   async rollback() {
     const trx = Intern.tryGetTrx(this.seneca)
 
-    /* TODO
     if (!trx) {
-      throw new Error()
+      throw new Error('There is no transaction to rollback, - did you forget to start one?')
     }
-    */
 
     await this.strategy.rollbackTrx(this.seneca, trx)
   }
@@ -81,10 +77,6 @@ class TrxApi {
 
 
 class Intern {
-  static getParentOfDelegate(seneca: any) {
-    return Object.getPrototypeOf(seneca)
-  }
-
   static tryGetTrx(seneca: any) {
     return seneca.fixedmeta?.custom?.entity_transaction?.trx
   }
@@ -93,9 +85,11 @@ class Intern {
   static getPluginMetaStorage(seneca: any) {
     return seneca.fixedmeta?.custom?.entity_transaction ?? null
   }
-  */
 
-  /*
+  static getParentOfDelegate(seneca: any) {
+    return Object.getPrototypeOf(seneca)
+  }
+
   static tryGetPendingTrxOfDelegateOrParentInstance(seneca: any) {
     // NOTE: If current_pending is not null, then it means the user is trying to start
     // a nested transaction, e.g.:
@@ -189,9 +183,10 @@ function entity_transaction(this: any) {
     name: 'entity-transaction',
 
     exports: {
-      // TODO: move these functions it under the `api` namespace
-      registerStrategy,
-      //tryGetPendingTrx
+      integration: {
+	registerStrategy,
+	tryGetTrx: Intern.tryGetTrx
+      }
     }
   }
 }

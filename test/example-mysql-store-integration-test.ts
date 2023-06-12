@@ -44,6 +44,8 @@ describe('example mysql store integration', () => {
 
 
   function MyPreciousStorePlugin(opts) {
+    const trxIntegrationApi = this.export('entity-transaction/integration') ?? null
+
     class MyPreciousStorePluginStrategy {
       constructor(db) {
       	this.db = db
@@ -66,10 +68,6 @@ describe('example mysql store integration', () => {
     function tableName(ent) {
       const canon = ent.canon$({ object: true })
       return canon.name
-    }
-
-    function tryRetrieveTrxInfo(seneca) {
-      return seneca.fixedmeta?.custom?.entity_transaction?.trx
     }
 
     const seneca = this
@@ -113,11 +111,9 @@ describe('example mysql store integration', () => {
 
     this.store.init(this, opts, store)
 
-    const registerTrxStrategy = this.export('entity-transaction/registerStrategy')
-    const isTrxPluginUsed = null != registerTrxStrategy
 
-    if (isTrxPluginUsed) {
-      registerTrxStrategy(new MyPreciousStorePluginStrategy(db))
+    if (trxIntegrationApi) {
+      trxIntegrationApi.registerStrategy(new MyPreciousStorePluginStrategy(db))
     }
   }
 

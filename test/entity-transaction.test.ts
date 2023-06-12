@@ -36,7 +36,7 @@ describe('entity-transaction', () => {
 	  }
 	}
 
-	this.export('entity-transaction/registerStrategy')(trx_strategy)
+	this.export('entity-transaction/integration').registerStrategy(trx_strategy)
     }
 
 
@@ -113,7 +113,7 @@ describe('entity-transaction', () => {
 	  }
 	}
 
-	this.export('entity-transaction/registerStrategy')(trx_strategy)
+	this.export('entity-transaction/integration').registerStrategy(trx_strategy)
     }
 
 
@@ -191,7 +191,7 @@ describe('entity-transaction', () => {
     let trx_handle
 
     function MyTrxPlugin() {
-	this.export('entity-transaction/registerStrategy')(trx_strategy)
+	this.export('entity-transaction/integration').registerStrategy(trx_strategy)
     }
 
 

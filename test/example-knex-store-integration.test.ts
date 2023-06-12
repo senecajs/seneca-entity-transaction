@@ -25,6 +25,8 @@ describe('example knex store integration', () => {
 
   describe('example store with integration', () => {
     function MyKnexStorePlugin(opts) {
+      const trxIntegrationApi = this.export('entity-transaction/integration') ?? null
+
       function defaultTrxStrategy(knex) {
 	const trx_strategy = {
 	  async startTrx(seneca, pending_trx = null) {
@@ -59,12 +61,8 @@ describe('example knex store integration', () => {
 	return canon.name
       }
 
-      function tryRetrieveTrxInfo(seneca) {
-	return seneca.fixedmeta?.custom?.entity_transaction?.trx
-      }
-
       function dbClient(seneca, knex) {
-	return tryRetrieveTrxInfo(seneca)?.ctx ?? knex
+	return trxIntegrationApi?.tryGetTrx(seneca)?.ctx ?? knex
       }
 
 
@@ -113,11 +111,9 @@ describe('example knex store integration', () => {
 
       this.store.init(this, opts, store)
 
-      const registerTrxStrategy = this.export('entity-transaction/registerStrategy')
-      const isTrxPluginUsed = null != registerTrxStrategy
 
-      if (isTrxPluginUsed) {
-	registerTrxStrategy(defaultTrxStrategy(knex))
+      if (trxIntegrationApi) {
+	trxIntegrationApi.registerStrategy(defaultTrxStrategy(knex))
       }
     }
 
@@ -587,7 +583,7 @@ describe('example knex store integration', () => {
     })
 
 
-    test('opening multiple nested trxs in series, off of an existing trx instance', (fin_) => {
+    test('opening multiple nested trxs in series, on an existing trx instance', (fin_) => {
       const fin = once(fin_)
 
       const seneca = Seneca().test(fin)
