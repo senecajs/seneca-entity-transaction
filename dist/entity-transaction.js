@@ -37,6 +37,19 @@ class TrxApi {
         // NOTE: We indicate that a trx has been completed by setting it to null.
         // Later, start() will rely on this when handling potential pending parent trxs.
         //
+        // Alternatively, we could pull down the trx instance from the parent, if such
+        // is available. Unfortunately, that would introduce a bug wherein users would
+        // be able to commit parent transactions via double-commits, e.g.:
+        //
+        // ```
+        //   const senecatrx = await this.transaction().start()
+        //   const nestedtrx = await senecatrx.transaction().start()
+        //
+        //   await nestedtrx.transaction().commit() // commits nestedtrx
+        //   await nestedtrx.transaction().commit() // commits senecatrx
+        //   
+        // ```
+        //
         Intern.getPluginMetaStorage(this.seneca).trx = null;
     }
     async rollback() {
