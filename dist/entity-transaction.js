@@ -7,7 +7,9 @@ class TrxApi {
         this.strategy = args.strategy;
     }
     async start() {
-        const ctx = await this.strategy.startTrx(this.seneca);
+        var _a, _b;
+        const parent_trx = (_b = (_a = getPluginMetaStorage(this.seneca)) === null || _a === void 0 ? void 0 : _a.trx) !== null && _b !== void 0 ? _b : null;
+        const ctx = await this.strategy.startTrx(this.seneca, parent_trx);
         let trx = {
             ctx
         };
@@ -21,17 +23,27 @@ class TrxApi {
         return seneca_trx;
     }
     async commit() {
-        const trx = tryRetrieveTrxInfo(this.seneca);
+        var _a;
+        const trx = (_a = getPluginMetaStorage(this.seneca)) === null || _a === void 0 ? void 0 : _a.trx;
+        if (!trx) {
+            return;
+        }
         await this.strategy.commitTrx(this.seneca, trx);
+        getPluginMetaStorage(this.seneca).trx = null;
     }
     async rollback() {
-        const trx = tryRetrieveTrxInfo(this.seneca);
+        var _a;
+        const trx = (_a = getPluginMetaStorage(this.seneca)) === null || _a === void 0 ? void 0 : _a.trx;
+        if (!trx) {
+            return;
+        }
         await this.strategy.rollbackTrx(this.seneca, trx);
+        getPluginMetaStorage(this.seneca).trx = null;
     }
 }
-function tryRetrieveTrxInfo(seneca) {
+function getPluginMetaStorage(seneca) {
     var _a, _b, _c;
-    return (_c = (_b = (_a = seneca.fixedmeta) === null || _a === void 0 ? void 0 : _a.custom) === null || _b === void 0 ? void 0 : _b.entity_transaction) === null || _c === void 0 ? void 0 : _c.trx;
+    return (_c = (_b = (_a = seneca.fixedmeta) === null || _a === void 0 ? void 0 : _a.custom) === null || _b === void 0 ? void 0 : _b.entity_transaction) !== null && _c !== void 0 ? _c : null;
 }
 function entity_transaction() {
     let strategy = null;

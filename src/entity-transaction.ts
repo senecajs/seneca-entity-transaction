@@ -6,7 +6,7 @@ type Trx = {
 }
 
 interface TrxStrategy {
-  startTrx(seneca: any): Promise<any>
+  startTrx(seneca: any, parent_trx?: Trx): Promise<any>
   commitTrx(seneca: any, trx: Trx): Promise<any>
   rollbackTrx(seneca: any, trx: Trx): Promise<any>
 }
@@ -27,7 +27,8 @@ class TrxApi {
   }
 
   async start() {
-    const ctx = await this.strategy.startTrx(this.seneca)
+    const parent_trx = getPluginMetaStorage(this.seneca)?.trx ?? null
+    const ctx = await this.strategy.startTrx(this.seneca, parent_trx)
 
     let trx: Trx = {
       ctx
@@ -45,19 +46,31 @@ class TrxApi {
   }
 
   async commit() {
-    const trx = tryRetrieveTrxInfo(this.seneca)
+    const trx = getPluginMetaStorage(this.seneca)?.trx
+
+    if (!trx) {
+      return
+    }
+
     await this.strategy.commitTrx(this.seneca, trx)
+    getPluginMetaStorage(this.seneca).trx = null
   }
 
   async rollback() {
-    const trx = tryRetrieveTrxInfo(this.seneca)
+    const trx = getPluginMetaStorage(this.seneca)?.trx
+
+    if (!trx) {
+      return
+    }
+
     await this.strategy.rollbackTrx(this.seneca, trx)
+    getPluginMetaStorage(this.seneca).trx = null
   }
 }
 
 
-function tryRetrieveTrxInfo(seneca: any): Trx {
-  return seneca.fixedmeta?.custom?.entity_transaction?.trx
+function getPluginMetaStorage(seneca: any) {
+  return seneca.fixedmeta?.custom?.entity_transaction ?? null
 }
 
 

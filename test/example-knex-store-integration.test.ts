@@ -27,21 +27,19 @@ describe('example knex store integration', () => {
     function MyKnexStorePlugin(opts) {
       function defaultTrxStrategy(knex) {
 	const trx_strategy = {
-	  async startTrx(seneca) {
-	    let trx
+	  async startTrx(seneca, pending_trx = null) {
+	    let ctx
 
 
-	    const pending_trx_info = tryRetrieveTrxInfo(seneca)
-
-	    if (pending_trx_info) {
-	      trx = await pending_trx_info.ctx.transaction()
+	    if (pending_trx) {
+	      ctx = await pending_trx.ctx.transaction()
 	    } else {
-	      trx = await knex.transaction()
+	      ctx = await knex.transaction()
 	    }
 
-	    knex_trx = trx
+	    knex_trx = ctx
 
-	    return trx
+	    return ctx
 	  },
 
 	  async commitTrx(_seneca, trx) {
@@ -536,6 +534,59 @@ describe('example knex store integration', () => {
 
       seneca.ready(function () {
 	this.act('hello:world', fin)
+      })
+    })
+
+
+    test('reusing trx instances', (fin_) => {
+      const fin = once(fin_)
+
+      const seneca = Seneca().test(fin)
+      seneca.use(SenecaEntity)
+      seneca.use(EntityTransaction)
+
+      seneca.use(MyKnexStorePlugin, {
+	getKnex() {
+	  return knex
+	}
+      })
+
+      seneca.add('hello:world', function (msg, reply) {
+      	async function impl() {
+	  expect(await countRecords(knex('seneca_users'))).toEqual(0)
+
+
+	  let senecatrx
+
+	  senecatrx = await this.transaction().start()
+
+	  await saveUser(senecatrx, {
+	    username: 'alice123',
+	    email: 'alice@example.com'
+	  })
+
+	  await senecatrx.transaction().commit()
+	  expect(await countRecords(knex('seneca_users'))).toEqual(1)
+
+
+	  senecatrx = await senecatrx.transaction().start()
+
+	  await saveUser(senecatrx, {
+	    username: 'bob456',
+	    email: 'bob@example.com'
+	  })
+
+	  await senecatrx.transaction().commit()
+	  expect(await countRecords(knex('seneca_users'))).toEqual(2)
+	}
+
+	impl.call(this)
+	  .then(() => reply())
+	  .catch(reply)
+      })
+
+      seneca.ready(function () {
+      	this.act('hello:world', fin)
       })
     })
   })
