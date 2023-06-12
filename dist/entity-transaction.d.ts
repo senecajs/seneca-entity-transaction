@@ -2,7 +2,7 @@ declare type Trx = {
     ctx: any;
 };
 interface TrxStrategy {
-    startTrx(seneca: any, parent_trx?: Trx): Promise<any>;
+    startTrx(seneca: any, pending_trx?: Trx): Promise<any>;
     commitTrx(seneca: any, trx: Trx): Promise<any>;
     rollbackTrx(seneca: any, trx: Trx): Promise<any>;
 }

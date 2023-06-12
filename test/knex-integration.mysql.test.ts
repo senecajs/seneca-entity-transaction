@@ -1044,24 +1044,28 @@ describe('knex integration', () => {
   test('__dbg', (fin) => {
     async function impl() {
       const trx = await knex.transaction()
+      const trx_child1 = await trx.transaction()
 
-      await trx('seneca_users').insert({
+      await trx_child1('seneca_users').insert({
 	username: 'alice',
 	email: 'alice@example.com'
       })
 
-      const trx_child = await trx.transaction()
+      await trx_child1.commit()
 
-      await trx_child('seneca_users').insert({
+
+      const trx_child2 = await trx.transaction()
+
+      await trx_child2('seneca_users').insert({
 	username: 'bob',
 	email: 'bob@example.com'
       })
 
-      await trx_child.rollback()
+      await trx_child2.commit()
 
-      await trx.commit()
+      await trx.rollback()
 
-      expect(await countRecords(knex('seneca_users'))).toEqual(1)
+      expect(await countRecords(knex('seneca_users'))).toEqual(0)
     }
 
     impl()

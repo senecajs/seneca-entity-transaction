@@ -6,7 +6,7 @@ type Trx = {
 }
 
 interface TrxStrategy {
-  startTrx(seneca: any, parent_trx?: Trx): Promise<any>
+  startTrx(seneca: any, pending_trx?: Trx): Promise<any>
   commitTrx(seneca: any, trx: Trx): Promise<any>
   rollbackTrx(seneca: any, trx: Trx): Promise<any>
 }
@@ -27,8 +27,14 @@ class TrxApi {
   }
 
   async start() {
-    const parent_trx = getPluginMetaStorage(this.seneca)?.trx ?? null
-    const ctx = await this.strategy.startTrx(this.seneca, parent_trx)
+    // NOTE: The purpose of retrieving pending transactions is as follows. Many db clients
+    // implement support for nested transactions. Which means that, by retrieving pending trx
+    // clients and passing them to users, the users are able to leverage their db client's
+    // management for nested transactions.
+    //
+    const pending_trx = Intern.tryGetPendingTrx(this.seneca) ?? null 
+
+    const ctx = await this.strategy.startTrx(this.seneca, pending_trx)
 
     let trx: Trx = {
       ctx
@@ -46,31 +52,71 @@ class TrxApi {
   }
 
   async commit() {
-    const trx = getPluginMetaStorage(this.seneca)?.trx
+    const trx = Intern.getPluginMetaStorage(this.seneca)?.trx
 
     if (!trx) {
       return
     }
 
     await this.strategy.commitTrx(this.seneca, trx)
-    getPluginMetaStorage(this.seneca).trx = null
+
+    // NOTE: We indicate that a trx has been completed by setting it to null.
+    // Later, start() will rely on this when handling potential pending parent trxs.
+    //
+    Intern.getPluginMetaStorage(this.seneca).trx = null
   }
 
   async rollback() {
-    const trx = getPluginMetaStorage(this.seneca)?.trx
+    const trx = Intern.getPluginMetaStorage(this.seneca)?.trx
 
     if (!trx) {
       return
     }
 
     await this.strategy.rollbackTrx(this.seneca, trx)
-    getPluginMetaStorage(this.seneca).trx = null
+
+    // NOTE: We indicate that a trx has been completed by setting it to null.
+    // Later, start() will rely on this when handling potential pending parent trxs.
+    //
+    Intern.getPluginMetaStorage(this.seneca).trx = null
   }
 }
 
 
-function getPluginMetaStorage(seneca: any) {
-  return seneca.fixedmeta?.custom?.entity_transaction ?? null
+class Intern {
+  static getParentOfDelegate(seneca: any) {
+    return Object.getPrototypeOf(seneca)
+  }
+
+  static getPluginMetaStorage(seneca: any) {
+    return seneca.fixedmeta?.custom?.entity_transaction ?? null
+  }
+
+  static tryGetPendingTrx(seneca: any) {
+    // NOTE: If current_pending is not null, then it means the user is trying to start
+    // a nested transaction, e.g.:
+    // ```
+    //	const senecatrx = await this.transaction().start()
+    //	await senecatrx.transaction().start()
+    // ```
+    //
+    const current_pending = Intern.getPluginMetaStorage(seneca)?.trx ?? null
+
+    // NOTE: If parent_pending is not null, then it means the user is trying to reuse
+    // a nested transaction, e.g.:
+    // ```
+    //	let senecatrx
+    //
+    //	senecatrx = await this.transaction().start()
+    //	await senecatrx.transaction().commit()
+    //
+    //	senecatrx = await senecatrx.transaction().start()
+    // ```
+    //
+    const parent_pending = Intern.getPluginMetaStorage(Intern.getParentOfDelegate(seneca))?.trx ?? null
+
+    return current_pending ?? parent_pending ?? null
+  }
 }
 
 

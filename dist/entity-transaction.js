@@ -7,9 +7,14 @@ class TrxApi {
         this.strategy = args.strategy;
     }
     async start() {
-        var _a, _b;
-        const parent_trx = (_b = (_a = getPluginMetaStorage(this.seneca)) === null || _a === void 0 ? void 0 : _a.trx) !== null && _b !== void 0 ? _b : null;
-        const ctx = await this.strategy.startTrx(this.seneca, parent_trx);
+        var _a;
+        // NOTE: The purpose of retrieving pending transactions is as follows. Many db clients
+        // implement support for nested transactions. Which means that, by retrieving pending trx
+        // clients and passing them to users, the users are able to leverage their db client's
+        // management for nested transactions.
+        //
+        const pending_trx = (_a = Intern.tryGetPendingTrx(this.seneca)) !== null && _a !== void 0 ? _a : null;
+        const ctx = await this.strategy.startTrx(this.seneca, pending_trx);
         let trx = {
             ctx
         };
@@ -24,26 +29,61 @@ class TrxApi {
     }
     async commit() {
         var _a;
-        const trx = (_a = getPluginMetaStorage(this.seneca)) === null || _a === void 0 ? void 0 : _a.trx;
+        const trx = (_a = Intern.getPluginMetaStorage(this.seneca)) === null || _a === void 0 ? void 0 : _a.trx;
         if (!trx) {
             return;
         }
         await this.strategy.commitTrx(this.seneca, trx);
-        getPluginMetaStorage(this.seneca).trx = null;
+        // NOTE: We indicate that a trx has been completed by setting it to null.
+        // Later, start() will rely on this when handling potential pending parent trxs.
+        //
+        Intern.getPluginMetaStorage(this.seneca).trx = null;
     }
     async rollback() {
         var _a;
-        const trx = (_a = getPluginMetaStorage(this.seneca)) === null || _a === void 0 ? void 0 : _a.trx;
+        const trx = (_a = Intern.getPluginMetaStorage(this.seneca)) === null || _a === void 0 ? void 0 : _a.trx;
         if (!trx) {
             return;
         }
         await this.strategy.rollbackTrx(this.seneca, trx);
-        getPluginMetaStorage(this.seneca).trx = null;
+        // NOTE: We indicate that a trx has been completed by setting it to null.
+        // Later, start() will rely on this when handling potential pending parent trxs.
+        //
+        Intern.getPluginMetaStorage(this.seneca).trx = null;
     }
 }
-function getPluginMetaStorage(seneca) {
-    var _a, _b, _c;
-    return (_c = (_b = (_a = seneca.fixedmeta) === null || _a === void 0 ? void 0 : _a.custom) === null || _b === void 0 ? void 0 : _b.entity_transaction) !== null && _c !== void 0 ? _c : null;
+class Intern {
+    static getParentOfDelegate(seneca) {
+        return Object.getPrototypeOf(seneca);
+    }
+    static getPluginMetaStorage(seneca) {
+        var _a, _b, _c;
+        return (_c = (_b = (_a = seneca.fixedmeta) === null || _a === void 0 ? void 0 : _a.custom) === null || _b === void 0 ? void 0 : _b.entity_transaction) !== null && _c !== void 0 ? _c : null;
+    }
+    static tryGetPendingTrx(seneca) {
+        var _a, _b, _c, _d, _e;
+        // NOTE: If current_pending is not null, then it means the user is trying to start
+        // a nested transaction, e.g.:
+        // ```
+        //	const senecatrx = await this.transaction().start()
+        //	await senecatrx.transaction().start()
+        // ```
+        //
+        const current_pending = (_b = (_a = Intern.getPluginMetaStorage(seneca)) === null || _a === void 0 ? void 0 : _a.trx) !== null && _b !== void 0 ? _b : null;
+        // NOTE: If parent_pending is not null, then it means the user is trying to reuse
+        // a nested transaction, e.g.:
+        // ```
+        //	let senecatrx
+        //
+        //	senecatrx = await this.transaction().start()
+        //	await senecatrx.transaction().commit()
+        //
+        //	senecatrx = await senecatrx.transaction().start()
+        // ```
+        //
+        const parent_pending = (_d = (_c = Intern.getPluginMetaStorage(Intern.getParentOfDelegate(seneca))) === null || _c === void 0 ? void 0 : _c.trx) !== null && _d !== void 0 ? _d : null;
+        return (_e = current_pending !== null && current_pending !== void 0 ? current_pending : parent_pending) !== null && _e !== void 0 ? _e : null;
+    }
 }
 function entity_transaction() {
     let strategy = null;
