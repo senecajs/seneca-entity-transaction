@@ -1043,29 +1043,50 @@ describe('knex integration', () => {
 
   test('__dbg', (fin) => {
     async function impl() {
-      const trx = await knex.transaction()
-      const trx_child1 = await trx.transaction()
+      /*
+      let trx
 
-      await trx_child1('seneca_users').insert({
+      trx = await knex.transaction()
+
+      await trx('seneca_users').insert({
 	username: 'alice',
 	email: 'alice@example.com'
       })
 
-      await trx_child1.commit()
+      await trx.commit()
 
+      trx = await trx.transaction()
 
-      const trx_child2 = await trx.transaction()
-
-      await trx_child2('seneca_users').insert({
+      await trx('seneca_users').insert({
 	username: 'bob',
 	email: 'bob@example.com'
       })
 
-      await trx_child2.commit()
+      await trx.commit()
 
-      await trx.rollback()
+      expect(await countRecords(knex('seneca_users'))).toEqual(2)
+      */
+    }
 
-      expect(await countRecords(knex('seneca_users'))).toEqual(0)
+    impl()
+      .then(fin)
+      .catch(fin)
+  })
+
+
+  test('EXAMPLE 1', (fin) => {
+    async function impl() {
+      const trx = await knex.transaction()
+      const trx_nested = await trx.transaction()
+
+      await trx_nested('seneca_users').insert({
+	username: 'alice',
+	email: 'alice@example.com'
+      })
+
+      await trx.commit()
+
+      expect(await countRecords(knex('seneca_users'))).toEqual(1)
     }
 
     impl()

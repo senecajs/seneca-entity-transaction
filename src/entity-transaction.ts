@@ -35,8 +35,8 @@ class TrxApi {
     // TODO: This should probably walk the whole delegation chain in search of a pending trx.
     // Not yet sure.
     //
-    const pending_trx = Intern.tryGetPendingTrxOfDelegateOrParentInstance(this.seneca) ?? null 
-
+    //const pending_trx = Intern.tryGetPendingTrxOfDelegateOrParentInstance(this.seneca) ?? null
+    const pending_trx = Intern.tryGetTrx(this.seneca) ?? null
     const ctx = await this.strategy.startTrx(this.seneca, pending_trx)
 
     let trx: Trx = {
@@ -55,46 +55,27 @@ class TrxApi {
   }
 
   async commit() {
-    const trx = Intern.getPluginMetaStorage(this.seneca)?.trx
+    const trx = Intern.tryGetTrx(this.seneca)
 
+    /* TODO
     if (!trx) {
-      return
+      throw new Error()
     }
+    */
 
     await this.strategy.commitTrx(this.seneca, trx)
-
-    // NOTE: We indicate that a trx has been completed by setting it to null.
-    // Later, start() will rely on this when handling potential pending parent trxs.
-    //
-    // Alternatively, we could pull down the trx instance from the parent, if such
-    // is available. Unfortunately, that would introduce a bug wherein users would
-    // be able to commit parent transactions via double-commits, e.g.:
-    //
-    // ```
-    //   const senecatrx = await this.transaction().start()
-    //   const nestedtrx = await senecatrx.transaction().start()
-    //
-    //   await nestedtrx.transaction().commit() // commits nestedtrx
-    //   await nestedtrx.transaction().commit() // commits senecatrx
-    //   
-    // ```
-    //
-    Intern.getPluginMetaStorage(this.seneca).trx = null
   }
 
   async rollback() {
-    const trx = Intern.getPluginMetaStorage(this.seneca)?.trx
+    const trx = Intern.tryGetTrx(this.seneca)
 
+    /* TODO
     if (!trx) {
-      return
+      throw new Error()
     }
+    */
 
     await this.strategy.rollbackTrx(this.seneca, trx)
-
-    // NOTE: We indicate that a trx has been completed by setting it to null.
-    // Later, start() will rely on this when handling potential pending parent trxs.
-    //
-    Intern.getPluginMetaStorage(this.seneca).trx = null
   }
 }
 
@@ -104,10 +85,17 @@ class Intern {
     return Object.getPrototypeOf(seneca)
   }
 
+  static tryGetTrx(seneca: any) {
+    return seneca.fixedmeta?.custom?.entity_transaction?.trx
+  }
+
+  /*
   static getPluginMetaStorage(seneca: any) {
     return seneca.fixedmeta?.custom?.entity_transaction ?? null
   }
+  */
 
+  /*
   static tryGetPendingTrxOfDelegateOrParentInstance(seneca: any) {
     // NOTE: If current_pending is not null, then it means the user is trying to start
     // a nested transaction, e.g.:
@@ -133,6 +121,7 @@ class Intern {
 
     return current_pending ?? parent_pending ?? null
   }
+  */
 }
 
 
@@ -173,6 +162,7 @@ function entity_transaction(this: any) {
     strategy = strategy_
   }
 
+  /*
   function tryGetPendingTrx(seneca: any) {
     // TODO: Test this.
     //
@@ -192,6 +182,7 @@ function entity_transaction(this: any) {
     //
     return Intern.tryGetPendingTrxOfDelegateOrParentInstance(this.seneca)?.trx ?? null
   }
+  */
 
 
   return {
@@ -200,7 +191,7 @@ function entity_transaction(this: any) {
     exports: {
       // TODO: move these functions it under the `api` namespace
       registerStrategy,
-      tryGetPendingTrx
+      //tryGetPendingTrx
     }
   }
 }

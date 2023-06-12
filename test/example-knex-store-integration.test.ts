@@ -70,6 +70,7 @@ describe('example knex store integration', () => {
 
       const seneca = this
       const knex = opts.getKnex()
+      const interceptStoreError = opts.interceptStoreError
 
       const store = {
 	name: 'MyKnexStore',
@@ -86,7 +87,7 @@ describe('example knex store integration', () => {
 
 	  db_client(tablename).insert(seneca.util.clean(msg.ent))
 	    .then(() => reply())
-	    .catch(reply)
+	    .catch(err => interceptStoreError(err, reply))
 	},
 
 	load(msg, reply) {
@@ -538,7 +539,7 @@ describe('example knex store integration', () => {
     })
 
 
-    test('reusing trx instances', (fin_) => {
+    test('nested trx, when parent trx is committed, the child trx is committed too', (fin_) => {
       const fin = once(fin_)
 
       const seneca = Seneca().test(fin)
@@ -551,47 +552,42 @@ describe('example knex store integration', () => {
 	}
       })
 
+
       seneca.add('hello:world', function (msg, reply) {
-      	async function impl() {
+	async function impl() {
 	  expect(await countRecords(knex('seneca_users'))).toEqual(0)
 
-
-	  let senecatrx
-
-	  senecatrx = await this.transaction().start()
-
-	  await saveUser(senecatrx, {
-	    username: 'alice123',
-	    email: 'alice@example.com'
-	  })
-
-	  await senecatrx.transaction().commit()
-	  expect(await countRecords(knex('seneca_users'))).toEqual(1)
+	  const senecatrx = await this.transaction().start()
 
 
-	  senecatrx = await senecatrx.transaction().start()
+	  const nestedtrx = await senecatrx.transaction().start()
 
-	  await saveUser(senecatrx, {
+	  await saveUser(nestedtrx, {
 	    username: 'bob456',
 	    email: 'bob@example.com'
 	  })
 
+
 	  await senecatrx.transaction().commit()
-	  expect(await countRecords(knex('seneca_users'))).toEqual(2)
+
+
+	  expect(await countRecords(knex('seneca_users'))).toEqual(1)
 	}
+
 
 	impl.call(this)
 	  .then(() => reply())
 	  .catch(reply)
       })
 
+
       seneca.ready(function () {
-      	this.act('hello:world', fin)
+	this.act('hello:world', fin)
       })
     })
 
 
-    test('reusing nested trx instances', (fin_) => {
+    test('opening multiple nested trxs in series, off of an existing trx instance', (fin_) => {
       const fin = once(fin_)
 
       const seneca = Seneca().test(fin)
@@ -618,7 +614,7 @@ describe('example knex store integration', () => {
 	  await senecatrx.transaction().commit()
 
 
-	  senecatrx = await senecatrx.transaction().start()
+	  senecatrx = await this.transaction().start()
 
 	  await saveUser(senecatrx, {
 	    username: 'bob456',
@@ -648,6 +644,66 @@ describe('example knex store integration', () => {
 
 	  await senecatrx.transaction().rollback()
 	  expect(await countRecords(knex('seneca_users'))).toEqual(0)
+	}
+
+	impl.call(this)
+	  .then(() => reply())
+	  .catch(reply)
+      })
+
+      seneca.ready(function () {
+      	this.act('hello:world', fin)
+      })
+    })
+
+
+    test('the plugin by itself does not manage trx reuse', (fin_) => {
+      const fin = once(fin_)
+      let was_the_trx_error_thrown = false
+
+
+      const seneca = Seneca().test(fin)
+
+      seneca.use(SenecaEntity)
+      seneca.use(EntityTransaction)
+
+      seneca.use(MyKnexStorePlugin, {
+	getKnex() {
+	  return knex
+	},
+
+	interceptStoreError(err, callback) {
+	  if (err?.message?.includes('Transaction query already complete')) {
+	    //
+	    // NOTE: This error is coming from knex, not the plugin.
+
+	    was_the_trx_error_thrown = true
+	    callback()
+
+	    return
+	  }
+
+	  callback(err)
+	}
+      })
+
+      seneca.add('hello:world', function (msg, reply) {
+      	async function impl() {
+      	  let senecatrx
+
+	  senecatrx = await this.transaction().start()
+	  await senecatrx.transaction().commit()
+
+
+	  senecatrx = await senecatrx.transaction().start()
+
+	  await saveUser(senecatrx, {
+	    username: 'alice123',
+	    email: 'alice@example.com'
+	  })
+
+	  expect(was_the_trx_error_thrown).toEqual(true)
+	  await senecatrx.transaction().commit()
 	}
 
 	impl.call(this)
