@@ -32,17 +32,13 @@ class TrxApi {
         return seneca_trx;
     }
     async commit() {
-        const trx = Intern.tryGetTrx(this.seneca);
-        if (!trx) {
-            throw new Error('There is no transaction to commit, - did you forget to start one?');
-        }
+        var _a;
+        const trx = (_a = Intern.tryGetTrx(this.seneca)) !== null && _a !== void 0 ? _a : null;
         await this.strategy.commitTrx(this.seneca, trx);
     }
     async rollback() {
-        const trx = Intern.tryGetTrx(this.seneca);
-        if (!trx) {
-            throw new Error('There is no transaction to rollback, - did you forget to start one?');
-        }
+        var _a;
+        const trx = (_a = Intern.tryGetTrx(this.seneca)) !== null && _a !== void 0 ? _a : null;
         await this.strategy.rollbackTrx(this.seneca, trx);
     }
 }

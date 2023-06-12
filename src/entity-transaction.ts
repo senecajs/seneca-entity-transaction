@@ -55,22 +55,12 @@ class TrxApi {
   }
 
   async commit() {
-    const trx = Intern.tryGetTrx(this.seneca)
-
-    if (!trx) {
-      throw new Error('There is no transaction to commit, - did you forget to start one?')
-    }
-
+    const trx = Intern.tryGetTrx(this.seneca) ?? null
     await this.strategy.commitTrx(this.seneca, trx)
   }
 
   async rollback() {
-    const trx = Intern.tryGetTrx(this.seneca)
-
-    if (!trx) {
-      throw new Error('There is no transaction to rollback, - did you forget to start one?')
-    }
-
+    const trx = Intern.tryGetTrx(this.seneca) ?? null
     await this.strategy.rollbackTrx(this.seneca, trx)
   }
 }

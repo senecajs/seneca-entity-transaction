@@ -51,7 +51,11 @@ describe('example mysql store integration', () => {
       	this.db = db
       }
 
-      async startTrx(_seneca) {
+      async startTrx(_seneca, pending_trx = null) {
+      	if (pending_trx) {
+      	  throw new Error('There is a pending trx already. Starting a new trx would cause an implicit commit.')
+	}
+
 	await this.db.query('START TRANSACTION')
 	return null
       }
@@ -158,7 +162,7 @@ describe('example mysql store integration', () => {
   })
 
 
-  test('nested trxs, start-start-rollback-rollback', (fin_) => {
+  test('store plugins may integrate entity transactions (test of rollback)', (fin_) => {
     const fin = once(fin_)
 
     const seneca = Seneca().test(fin)
@@ -171,12 +175,9 @@ describe('example mysql store integration', () => {
       }
     })
 
-
-    seneca.add('hello:world', function (msg, reply) {
+    seneca.ready(function () {
       async function impl() {
 	expect(await MysqlHelpers.countRecords(db_global, 'seneca_users')).toEqual(0)
-
-
 	const senecatrx = await this.transaction().start()
 
 	await saveUser(senecatrx, {
@@ -184,33 +185,24 @@ describe('example mysql store integration', () => {
 	  email: 'alice@example.com'
 	})
 
-
-	const senecatrx_child = await senecatrx.transaction().start()
-
-	await saveUser(senecatrx_child, {
+	await saveUser(senecatrx, {
 	  username: 'bob456',
 	  email: 'bob@example.com'
 	})
 
-
-	await senecatrx_child.transaction().rollback()
 	await senecatrx.transaction().rollback()
-
 	expect(await MysqlHelpers.countRecords(db_global, 'seneca_users')).toEqual(0)
       }
 
-      impl.call(this)
-	.then(() => reply())
-	.catch(reply)
-    })
 
-    seneca.ready(function () {
-      this.act('hello:world', fin)
+      impl.call(this)
+	.then(() => fin())
+	.catch(fin)
     })
   })
 
 
-  test('nested trxs, start-start-commit-rollback', (fin_) => {
+  test('trx is carried over via a prior stack (rollback test)', (fin_) => {
     const fin = once(fin_)
 
     const seneca = Seneca().test(fin)
@@ -226,9 +218,20 @@ describe('example mysql store integration', () => {
 
     seneca.add('hello:world', function (msg, reply) {
       async function impl() {
+	await saveUser(this, {
+	  username: 'bob456',
+	  email: 'bob@example.com'
+	})
+      }
+
+      impl.call(this)
+	.then(() => reply())
+	.catch(reply)
+    })
+
+    seneca.add('hello:world', function (msg, reply) {
+      async function impl() {
 	expect(await MysqlHelpers.countRecords(db_global, 'seneca_users')).toEqual(0)
-
-
 	const senecatrx = await this.transaction().start()
 
 	await saveUser(senecatrx, {
@@ -236,18 +239,19 @@ describe('example mysql store integration', () => {
 	  email: 'alice@example.com'
 	})
 
-
-	const senecatrx_child = await senecatrx.transaction().start()
-
-	await saveUser(senecatrx_child, {
-	  username: 'bob456',
-	  email: 'bob@example.com'
+	await new Promise((resolve, reject) => {
+	  senecatrx.prior(msg, function (err) {
+	    if (err) return reject(err)
+	    resolve()
+	  })
 	})
 
+	await saveUser(senecatrx, {
+	  username: 'charlie456',
+	  email: 'charlie@example.com'
+	})
 
-	await senecatrx_child.transaction().commit()
 	await senecatrx.transaction().rollback()
-
 	expect(await MysqlHelpers.countRecords(db_global, 'seneca_users')).toEqual(0)
       }
 
@@ -257,12 +261,12 @@ describe('example mysql store integration', () => {
     })
 
     seneca.ready(function () {
-      this.act('hello:world', fin)
+      seneca.act('hello:world', fin)
     })
   })
 
 
-  test('parallel trxs are handled correctly', (fin_) => {
+  test('trx is carried over via a prior stack (commit test)', (fin_) => {
     const fin = once(fin_)
 
     const seneca = Seneca().test(fin)
@@ -278,29 +282,41 @@ describe('example mysql store integration', () => {
 
     seneca.add('hello:world', function (msg, reply) {
       async function impl() {
+	await saveUser(this, {
+	  username: 'bob456',
+	  email: 'bob@example.com'
+	})
+      }
+
+      impl.call(this)
+	.then(() => reply())
+	.catch(reply)
+    })
+
+    seneca.add('hello:world', function (msg, reply) {
+      async function impl() {
 	expect(await MysqlHelpers.countRecords(db_global, 'seneca_users')).toEqual(0)
+	const senecatrx = await this.transaction().start()
 
-
-	const senecatrx1 = await this.transaction().start()
-
-	await saveUser(senecatrx1, {
+	await saveUser(senecatrx, {
 	  username: 'alice123',
 	  email: 'alice@example.com'
 	})
 
-
-	const senecatrx2 = await this.transaction().start()
-
-	await saveUser(senecatrx2, {
-	  username: 'bob456',
-	  email: 'bob@example.com'
+	await new Promise((resolve, reject) => {
+	  senecatrx.prior(msg, function (err) {
+	    if (err) return reject(err)
+	    resolve()
+	  })
 	})
 
+	await saveUser(senecatrx, {
+	  username: 'charlie456',
+	  email: 'charlie@example.com'
+	})
 
-	await senecatrx2.transaction().rollback()
-	await senecatrx1.transaction().commit()
-
-	expect(await MysqlHelpers.countRecords(db_global, 'seneca_users')).toEqual(1)
+	await senecatrx.transaction().commit()
+	expect(await MysqlHelpers.countRecords(db_global, 'seneca_users')).toEqual(3)
       }
 
       impl.call(this)
@@ -309,12 +325,12 @@ describe('example mysql store integration', () => {
     })
 
     seneca.ready(function () {
-      this.act('hello:world', fin)
+      seneca.act('hello:world', fin)
     })
   })
 
 
-  test('nested trxs, start in a handler, start-commit in a subhandler, rollback in the handler', (fin_) => {
+  test('trx is carried over to a subhandler (rollback test)', (fin_) => {
     const fin = once(fin_)
 
     const seneca = Seneca().test(fin)
@@ -330,14 +346,10 @@ describe('example mysql store integration', () => {
 
     seneca.add('bonjour:monde', function (msg, reply) {
       async function impl() {
-	const senecatrx = await this.transaction().start()
-
-	await saveUser(senecatrx, {
-	  username: 'alice123',
-	  email: 'alice@example.com'
+	await saveUser(this, {
+	  username: 'bob456',
+	  email: 'bob@example.com'
 	})
-
-	await senecatrx.transaction().commit()
       }
 
       impl.call(this)
@@ -345,18 +357,15 @@ describe('example mysql store integration', () => {
 	.catch(reply)
     })
 
-
     seneca.add('hello:world', function (msg, reply) {
       async function impl() {
 	expect(await MysqlHelpers.countRecords(db_global, 'seneca_users')).toEqual(0)
-
 	const senecatrx = await this.transaction().start()
 
 	await saveUser(senecatrx, {
-	  username: 'bob456',
-	  email: 'bob@example.com'
+	  username: 'alice123',
+	  email: 'alice@example.com'
 	})
-
 
 	await new Promise((resolve, reject) => {
 	  senecatrx.act('bonjour:monde', function (err) {
@@ -365,28 +374,27 @@ describe('example mysql store integration', () => {
 	  })
 	})
 
-
-	expect(await MysqlHelpers.countRecords(db_global, 'seneca_users')).toEqual(0)
+	await saveUser(senecatrx, {
+	  username: 'charlie456',
+	  email: 'charlie@example.com'
+	})
 
 	await senecatrx.transaction().rollback()
-
 	expect(await MysqlHelpers.countRecords(db_global, 'seneca_users')).toEqual(0)
       }
-
 
       impl.call(this)
 	.then(() => reply())
 	.catch(reply)
     })
 
-
     seneca.ready(function () {
-      this.act('hello:world', fin)
+      seneca.act('hello:world', fin)
     })
   })
 
 
-  test('nested trxs, start in a handler, start-rollback in a subhandler, commit in the handler', (fin_) => {
+  test('trx is carried over to a subhandler (commit test)', (fin_) => {
     const fin = once(fin_)
 
     const seneca = Seneca().test(fin)
@@ -402,14 +410,10 @@ describe('example mysql store integration', () => {
 
     seneca.add('bonjour:monde', function (msg, reply) {
       async function impl() {
-	const senecatrx = await this.transaction().start()
-
-	await saveUser(senecatrx, {
-	  username: 'alice123',
-	  email: 'alice@example.com'
+	await saveUser(this, {
+	  username: 'bob456',
+	  email: 'bob@example.com'
 	})
-
-	await senecatrx.transaction().rollback()
       }
 
       impl.call(this)
@@ -417,18 +421,15 @@ describe('example mysql store integration', () => {
 	.catch(reply)
     })
 
-
     seneca.add('hello:world', function (msg, reply) {
       async function impl() {
 	expect(await MysqlHelpers.countRecords(db_global, 'seneca_users')).toEqual(0)
-
 	const senecatrx = await this.transaction().start()
 
 	await saveUser(senecatrx, {
-	  username: 'bob456',
-	  email: 'bob@example.com'
+	  username: 'alice123',
+	  email: 'alice@example.com'
 	})
-
 
 	await new Promise((resolve, reject) => {
 	  senecatrx.act('bonjour:monde', function (err) {
@@ -437,20 +438,70 @@ describe('example mysql store integration', () => {
 	  })
 	})
 
-
-	expect(await MysqlHelpers.countRecords(db_global, 'seneca_users')).toEqual(0)
+	await saveUser(senecatrx, {
+	  username: 'charlie456',
+	  email: 'charlie@example.com'
+	})
 
 	await senecatrx.transaction().commit()
-
-	expect(await MysqlHelpers.countRecords(db_global, 'seneca_users')).toEqual(1)
+	expect(await MysqlHelpers.countRecords(db_global, 'seneca_users')).toEqual(3)
       }
-
 
       impl.call(this)
 	.then(() => reply())
 	.catch(reply)
     })
 
+    seneca.ready(function () {
+      seneca.act('hello:world', fin)
+    })
+  })
+
+
+  test('nested trxs, start-start-commit-rollback, strategy can prevent implicit commits', (fin_) => {
+    const fin = once(fin_)
+
+    const seneca = Seneca().test(fin)
+    seneca.use(SenecaEntity)
+    seneca.use(EntityTransaction)
+
+    seneca.use(MyPreciousStorePlugin, {
+      getConnection() {
+	return db
+      }
+    })
+
+
+    seneca.add('hello:world', function (msg, reply) {
+      async function impl() {
+	expect(await MysqlHelpers.countRecords(db_global, 'seneca_users')).toEqual(0)
+
+
+	const senecatrx = await this.transaction().start()
+
+	await saveUser(senecatrx, {
+	  username: 'alice123',
+	  email: 'alice@example.com'
+	})
+
+
+	try {
+	  const _senecatrx_child = await senecatrx.transaction().start()
+	} catch (err) {
+	  if (err?.message === 'There is a pending trx already. Starting a new trx would cause an implicit commit.') {
+	    return
+	  }
+
+	  throw err
+	}
+
+	throw new Error('Expected the code to throw an error')
+      }
+
+      impl.call(this)
+	.then(() => reply())
+	.catch(reply)
+    })
 
     seneca.ready(function () {
       this.act('hello:world', fin)

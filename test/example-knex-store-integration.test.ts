@@ -1093,6 +1093,7 @@ describe('example knex store integration', () => {
       })
     })
 
+
     test('trx is carried over to a subhandler (commit test)', (fin_) => {
       const fin = once(fin_)
 
