@@ -1,3 +1,4 @@
+import { EventEmitter } from 'node:events'
 import Knex from 'knex'
 import EntityTransaction from '..'
 import MysqlTestDbConfig from './support/mysql/config.ts'
@@ -24,51 +25,10 @@ describe('example knex store integration', () => {
   })
 
   describe('example store with integration', () => {
-    function MyKnexStorePlugin(opts) {
-      const trxIntegrationApi = this.export('entity-transaction/integration') ?? null
-
-      function defaultTrxStrategy(knex) {
-	const trx_strategy = {
-	  async startTrx(seneca, pending_trx = null) {
-	    let ctx
-
-
-	    if (pending_trx) {
-	      ctx = await pending_trx.ctx.transaction()
-	    } else {
-	      ctx = await knex.transaction()
-	    }
-
-	    knex_trx = ctx
-
-	    return ctx
-	  },
-
-	  async commitTrx(_seneca, trx) {
-	    await trx.ctx.commit()
-	  },
-
-	  async rollbackTrx(_seneca, trx) {
-	    await trx.ctx.rollback()
-	  }
-	}
-
-	return trx_strategy
-      }
-
-      function tableName(ent) {
-	const canon = ent.canon$({ object: true })
-	return canon.name
-      }
-
-      function dbClient(seneca, knex) {
-	return trxIntegrationApi?.tryGetTrx(seneca)?.ctx ?? knex
-      }
-
-
+    function MyExampleKnexStorePlugin(opts) {
       const seneca = this
+      const trxIntegrationApi = seneca.export('entity-transaction/integration') ?? null
       const knex = opts.getKnex()
-      const interceptStoreError = opts.interceptStoreError
 
       const store = {
 	name: 'MyKnexStore',
@@ -84,8 +44,8 @@ describe('example knex store integration', () => {
 	  const db_client = dbClient(this, knex)
 
 	  db_client(tablename).insert(seneca.util.clean(msg.ent))
-	    .then(() => reply())
-	    .catch(err => interceptStoreError(err, reply))
+	    .then(([id]) => reply(null, { id }))
+	    .catch(err => opts.interceptStoreError(err, reply))
 	},
 
 	load(msg, reply) {
@@ -113,8 +73,43 @@ describe('example knex store integration', () => {
 
 
       if (trxIntegrationApi) {
-	trxIntegrationApi.registerStrategy(defaultTrxStrategy(knex))
+      	const trx_strategy = opts.getTrxStrategy(knex)
+	trxIntegrationApi.registerStrategy(trx_strategy)
       }
+
+      function tableName(ent) {
+	const canon = ent.canon$({ object: true })
+	return canon.name
+      }
+
+      function dbClient(seneca, knex) {
+	return trxIntegrationApi?.tryGetTrx(seneca)?.ctx.knex ?? knex
+      }
+    }
+
+    // NOTE: Trx strategies are supposed to be implemented by store plugins. For example,
+    // in this scenario - it's the example store plugin.
+    //
+    function makeSimpleTrxStrategy(knex) {
+      const trx_strategy = {
+	async startTrx(seneca, pending_trx = null) {
+	  if (pending_trx) {
+	    return { knex: await pending_trx.ctx.knex.transaction() }
+	  }
+
+	  return { knex: await knex.transaction() }
+	},
+
+	async commitTrx(_seneca, trx) {
+	  await trx.ctx.knex.commit()
+	},
+
+	async rollbackTrx(_seneca, trx) {
+	  await trx.ctx.knex.rollback()
+	}
+      }
+
+      return trx_strategy
     }
 
 
@@ -125,10 +120,12 @@ describe('example knex store integration', () => {
       seneca.use(SenecaEntity)
       seneca.use(EntityTransaction)
 
-      seneca.use(MyKnexStorePlugin, {
+      seneca.use(MyExampleKnexStorePlugin, {
 	getKnex() {
 	  return knex
-	}
+	},
+
+	getTrxStrategy: makeSimpleTrxStrategy
       })
 
       seneca.ready(function () {
@@ -165,10 +162,12 @@ describe('example knex store integration', () => {
       seneca.use(SenecaEntity)
       seneca.use(EntityTransaction)
 
-      seneca.use(MyKnexStorePlugin, {
+      seneca.use(MyExampleKnexStorePlugin, {
 	getKnex() {
 	  return knex
-	}
+	},
+
+	getTrxStrategy: makeSimpleTrxStrategy
       })
 
       seneca.ready(function () {
@@ -204,10 +203,12 @@ describe('example knex store integration', () => {
       const seneca = Seneca().test(fin)
       seneca.use(SenecaEntity)
 
-      seneca.use(MyKnexStorePlugin, {
+      seneca.use(MyExampleKnexStorePlugin, {
 	getKnex() {
 	  return knex
-	}
+	},
+
+	getTrxStrategy: makeSimpleTrxStrategy
       })
 
       seneca.ready(function () {
@@ -242,10 +243,12 @@ describe('example knex store integration', () => {
       seneca.use(SenecaEntity)
       seneca.use(EntityTransaction)
 
-      seneca.use(MyKnexStorePlugin, {
+      seneca.use(MyExampleKnexStorePlugin, {
 	getKnex() {
 	  return knex
-	}
+	},
+
+	getTrxStrategy: makeSimpleTrxStrategy
       })
 
 
@@ -294,10 +297,12 @@ describe('example knex store integration', () => {
       seneca.use(SenecaEntity)
       seneca.use(EntityTransaction)
 
-      seneca.use(MyKnexStorePlugin, {
+      seneca.use(MyExampleKnexStorePlugin, {
 	getKnex() {
 	  return knex
-	}
+	},
+
+	getTrxStrategy: makeSimpleTrxStrategy
       })
 
 
@@ -346,10 +351,12 @@ describe('example knex store integration', () => {
       seneca.use(SenecaEntity)
       seneca.use(EntityTransaction)
 
-      seneca.use(MyKnexStorePlugin, {
+      seneca.use(MyExampleKnexStorePlugin, {
 	getKnex() {
 	  return knex
-	}
+	},
+
+	getTrxStrategy: makeSimpleTrxStrategy
       })
 
 
@@ -413,10 +420,12 @@ describe('example knex store integration', () => {
       seneca.use(SenecaEntity)
       seneca.use(EntityTransaction)
 
-      seneca.use(MyKnexStorePlugin, {
+      seneca.use(MyExampleKnexStorePlugin, {
 	getKnex() {
 	  return knex
-	}
+	},
+
+	getTrxStrategy: makeSimpleTrxStrategy
       })
 
 
@@ -466,10 +475,12 @@ describe('example knex store integration', () => {
       seneca.use(SenecaEntity)
       seneca.use(EntityTransaction)
 
-      seneca.use(MyKnexStorePlugin, {
+      seneca.use(MyExampleKnexStorePlugin, {
 	getKnex() {
 	  return knex
-	}
+	},
+
+	getTrxStrategy: makeSimpleTrxStrategy
       })
 
 
@@ -535,10 +546,12 @@ describe('example knex store integration', () => {
       seneca.use(SenecaEntity)
       seneca.use(EntityTransaction)
 
-      seneca.use(MyKnexStorePlugin, {
+      seneca.use(MyExampleKnexStorePlugin, {
 	getKnex() {
 	  return knex
-	}
+	},
+
+	getTrxStrategy: makeSimpleTrxStrategy
       })
 
 
@@ -587,10 +600,12 @@ describe('example knex store integration', () => {
       seneca.use(SenecaEntity)
       seneca.use(EntityTransaction)
 
-      seneca.use(MyKnexStorePlugin, {
+      seneca.use(MyExampleKnexStorePlugin, {
 	getKnex() {
 	  return knex
-	}
+	},
+
+	getTrxStrategy: makeSimpleTrxStrategy
       })
 
 
@@ -659,10 +674,12 @@ describe('example knex store integration', () => {
       seneca.use(SenecaEntity)
       seneca.use(EntityTransaction)
 
-      seneca.use(MyKnexStorePlugin, {
+      seneca.use(MyExampleKnexStorePlugin, {
 	getKnex() {
 	  return knex
-	}
+	},
+
+	getTrxStrategy: makeSimpleTrxStrategy
       })
 
 
@@ -731,10 +748,12 @@ describe('example knex store integration', () => {
       seneca.use(SenecaEntity)
       seneca.use(EntityTransaction)
 
-      seneca.use(MyKnexStorePlugin, {
+      seneca.use(MyExampleKnexStorePlugin, {
 	getKnex() {
 	  return knex
-	}
+	},
+
+	getTrxStrategy: makeSimpleTrxStrategy
       })
 
 
@@ -779,10 +798,12 @@ describe('example knex store integration', () => {
       seneca.use(SenecaEntity)
       seneca.use(EntityTransaction)
 
-      seneca.use(MyKnexStorePlugin, {
+      seneca.use(MyExampleKnexStorePlugin, {
 	getKnex() {
 	  return knex
-	}
+	},
+
+	getTrxStrategy: makeSimpleTrxStrategy
       })
 
       seneca.add('bonjour:monde', function (msg, reply) {
@@ -852,10 +873,12 @@ describe('example knex store integration', () => {
       seneca.use(SenecaEntity)
       seneca.use(EntityTransaction)
 
-      seneca.use(MyKnexStorePlugin, {
+      seneca.use(MyExampleKnexStorePlugin, {
 	getKnex() {
 	  return knex
 	},
+
+	getTrxStrategy: makeSimpleTrxStrategy,
 
 	interceptStoreError(err, callback) {
 	  if (err?.message?.includes('Transaction query already complete')) {
@@ -909,10 +932,12 @@ describe('example knex store integration', () => {
       seneca.use(SenecaEntity)
       seneca.use(EntityTransaction)
 
-      seneca.use(MyKnexStorePlugin, {
+      seneca.use(MyExampleKnexStorePlugin, {
 	getKnex() {
 	  return knex
-	}
+	},
+
+	getTrxStrategy: makeSimpleTrxStrategy
       })
 
 
@@ -973,10 +998,12 @@ describe('example knex store integration', () => {
       seneca.use(SenecaEntity)
       seneca.use(EntityTransaction)
 
-      seneca.use(MyKnexStorePlugin, {
+      seneca.use(MyExampleKnexStorePlugin, {
 	getKnex() {
 	  return knex
-	}
+	},
+
+	getTrxStrategy: makeSimpleTrxStrategy
       })
 
 
@@ -1037,10 +1064,12 @@ describe('example knex store integration', () => {
       seneca.use(SenecaEntity)
       seneca.use(EntityTransaction)
 
-      seneca.use(MyKnexStorePlugin, {
+      seneca.use(MyExampleKnexStorePlugin, {
 	getKnex() {
 	  return knex
-	}
+	},
+
+	getTrxStrategy: makeSimpleTrxStrategy
       })
 
 
@@ -1101,10 +1130,12 @@ describe('example knex store integration', () => {
       seneca.use(SenecaEntity)
       seneca.use(EntityTransaction)
 
-      seneca.use(MyKnexStorePlugin, {
+      seneca.use(MyExampleKnexStorePlugin, {
 	getKnex() {
 	  return knex
-	}
+	},
+
+	getTrxStrategy: makeSimpleTrxStrategy
       })
 
 
@@ -1156,10 +1187,233 @@ describe('example knex store integration', () => {
       	seneca.act('hello:world', fin)
       })
     })
+
+    describe('store strategy implementing post-commit hooks', () => {
+      function makeTrxStrategyWithPostCommitHooksSupport(knex) {
+	const trx_strategy = {
+	  async startTrx(seneca, pending_trx = null) {
+	    if (pending_trx) {
+	      return {
+	      	is_master: false,
+	      	events: pending_trx.ctx.events,
+		knex: await pending_trx.ctx.knex.transaction()
+	      }
+	    }
+
+	    return {
+	      is_master: true,
+	      events: new EventEmitter(),
+	      knex: await knex.transaction()
+	    }
+	  },
+
+	  async commitTrx(_seneca, trx) {
+	    await trx.ctx.knex.commit()
+
+	    if (trx.ctx.is_master) {
+	      trx.ctx.events.emit('afterMasterCommit')
+	    }
+	  },
+
+	  async rollbackTrx(_seneca, trx) {
+	    await trx.ctx.knex.rollback()
+
+	    if (trx.ctx.is_master) {
+	      trx.ctx.events.emit('afterMasterRollback')
+	    }
+	  }
+	}
+
+	return trx_strategy
+      }
+
+      test('post-commit hooks can be implemented in a way they will not get triggered if the master trx got rolled back', (fin_) => {
+	const fin = once(fin_)
+
+	const seneca = Seneca().test(fin)
+	seneca.use(SenecaEntity)
+	seneca.use(EntityTransaction)
+
+	seneca.use(MyExampleKnexStorePlugin, {
+	  getKnex() {
+	    return knex
+	  },
+
+	  getTrxStrategy: makeTrxStrategyWithPostCommitHooksSupport
+	})
+
+
+	const notifyPersonalManager = jest.fn()
+	const emailPremiumCustomer = jest.fn()
+
+
+	seneca.add('cmd:createPersonalManager', function (msg, reply) {
+	  async function impl() {
+	    const senecatrx = await this.transaction().start()
+	    const trx = await senecatrx.transaction().current()
+
+	    trx.ctx.events.once('afterMasterCommit', () => {
+	      notifyPersonalManager()
+	    })
+
+
+	    await saveUser(senecatrx, {
+	      username: 'bob456',
+	      email: 'bob@example.com'
+	    })
+
+
+	    await senecatrx.transaction().commit()
+	  }
+
+	  impl.call(this)
+	    .then(() => reply())
+	    .catch(reply)
+	})
+
+	seneca.add('cmd:createPremiumCustomer', function (msg, reply) {
+	  async function impl() {
+	    const senecatrx = await this.transaction().start()
+	    const trx = await senecatrx.transaction().current()
+
+	    trx.ctx.events.once('afterMasterCommit', () => {
+	      emailPremiumCustomer()
+	    })
+
+
+	    await saveUser(senecatrx, {
+	      username: 'alice123',
+	      email: 'alice@example.com'
+	    })
+
+	    await new Promise((resolve, reject) => {
+	      senecatrx.act('cmd:createPersonalManager', function (err) {
+		if (err) return reject(err)
+		resolve()
+	      })
+	    })
+
+
+	    await senecatrx.transaction().rollback()
+	  }
+
+	  impl.call(this)
+	    .then(() => reply())
+	    .catch(reply)
+	})
+
+	seneca.ready(function () {
+	  seneca.act('cmd:createPremiumCustomer', function (err) {
+	    if (err) return fin(err)
+
+	    expect(notifyPersonalManager.mock.calls.length).toEqual(0)
+	    expect(emailPremiumCustomer.mock.calls.length).toEqual(0)
+
+	    fin()
+	  })
+	})
+      })
+
+      test('post-commit hooks can be implemented in a way they get triggered upon commit of a master trx', (fin_) => {
+	const fin = once(fin_)
+
+	const seneca = Seneca().test(fin)
+	seneca.use(SenecaEntity)
+	seneca.use(EntityTransaction)
+
+	seneca.use(MyExampleKnexStorePlugin, {
+	  getKnex() {
+	    return knex
+	  },
+
+	  getTrxStrategy: makeTrxStrategyWithPostCommitHooksSupport
+	})
+
+
+	const notifyPersonalManager = jest.fn()
+	const emailPremiumCustomer = jest.fn()
+
+	let user_alice
+	let user_bob
+
+
+	seneca.add('cmd:createPersonalManager', function (msg, reply) {
+	  async function impl() {
+	    const senecatrx = await this.transaction().start()
+
+	    user_bob = await saveUser(senecatrx, {
+	      username: 'bob456',
+	      email: 'bob@example.com'
+	    })
+
+
+	    const trx = await senecatrx.transaction().current()
+
+	    trx.ctx.events.once('afterMasterCommit', () => {
+	      notifyPersonalManager(user_bob.id)
+	    })
+
+
+	    await senecatrx.transaction().commit()
+	  }
+
+	  impl.call(this)
+	    .then(() => reply())
+	    .catch(reply)
+	})
+
+	seneca.add('cmd:createPremiumCustomer', function (msg, reply) {
+	  async function impl() {
+	    const senecatrx = await this.transaction().start()
+
+	    user_alice = await saveUser(senecatrx, {
+	      username: 'alice123',
+	      email: 'alice@example.com'
+	    })
+
+
+	    const trx = await senecatrx.transaction().current()
+
+	    trx.ctx.events.once('afterMasterCommit', () => {
+	      emailPremiumCustomer(user_alice.id)
+	    })
+
+
+	    await new Promise((resolve, reject) => {
+	      senecatrx.act('cmd:createPersonalManager', function (err) {
+		if (err) return reject(err)
+		resolve()
+	      })
+	    })
+
+
+	    await senecatrx.transaction().commit()
+	  }
+
+	  impl.call(this)
+	    .then(() => reply())
+	    .catch(reply)
+	})
+
+	seneca.ready(function () {
+	  seneca.act('cmd:createPremiumCustomer', function (err) {
+	    if (err) return fin(err)
+
+	    expect(user_bob.id).toBeTruthy()
+	    expect(notifyPersonalManager).toHaveBeenCalledWith(user_bob.id)
+
+	    expect(user_alice.id).toBeTruthy()
+	    expect(emailPremiumCustomer).toHaveBeenCalledWith(user_alice.id)
+
+	    fin()
+	  })
+	})
+      })
+    })
   })
 
   describe('example store without integration', () => {
-    function MyKnexStorePlugin(opts) {
+    function MyExampleKnexStorePlugin(opts) {
       function tableName(ent) {
 	const canon = ent.canon$({ object: true })
 	return canon.name
@@ -1216,7 +1470,7 @@ describe('example knex store integration', () => {
       seneca.use(SenecaEntity)
       seneca.use(EntityTransaction)
 
-      seneca.use(MyKnexStorePlugin, {
+      seneca.use(MyExampleKnexStorePlugin, {
 	getKnex() {
 	  return knex
 	}
@@ -1249,12 +1503,12 @@ describe('example knex store integration', () => {
 })
 
 async function saveUser(seneca, data) {
-  await new Promise((resolve, reject) => {
+  return new Promise((resolve, reject) => {
     seneca.make$('seneca_users')
       .data$(data)
-      .save$((err) => {
+      .save$((err, result) => {
 	if (err) return reject(err)
-	resolve()
+	resolve(result)
       })
   })
 }

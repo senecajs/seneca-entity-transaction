@@ -7,7 +7,7 @@ class TrxApi {
         this.strategy = args.strategy;
     }
     async start() {
-        var _a;
+        /*
         // NOTE: The purpose of retrieving pending transactions is as follows. Many db clients
         // implement support for nested transactions. Which means that, by retrieving pending trx
         // clients and passing them to users, the users are able to leverage their db client's
@@ -17,11 +17,22 @@ class TrxApi {
         // Not yet sure.
         //
         //const pending_trx = Intern.tryGetPendingTrxOfDelegateOrParentInstance(this.seneca) ?? null
+        */
+        var _a;
         const pending_trx = (_a = Intern.tryGetTrx(this.seneca)) !== null && _a !== void 0 ? _a : null;
+        // NOTE: If a transaction already exists, we __must__ nonetheless invoke the startTrx
+        // hook because:
+        // - client's strategy may utilize a db client which supports nested transactions
+        // - client's strategy may implement custom logic to handle nested transactions
         const ctx = await this.strategy.startTrx(this.seneca, pending_trx);
-        let trx = {
+        const trx = {
             ctx
         };
+        // NOTE: We __must__ return a delegate here, because some db clients either
+        // implement an adapter to simulate nested transactions (e.g. knex with
+        // the mysql2 driver) or support nested transactions directly. Therefore,
+        // a nested transaction's handle, too, must be stored.
+        //
         const seneca_trx = this.seneca.delegate(null, {
             custom: {
                 entity_transaction: {
@@ -35,11 +46,23 @@ class TrxApi {
         var _a;
         const trx = (_a = Intern.tryGetTrx(this.seneca)) !== null && _a !== void 0 ? _a : null;
         await this.strategy.commitTrx(this.seneca, trx);
+        // NOTE: You may wonder, how come we are not null-ifying completed transactions.
+        // We are not null-ifying completed transactions because we want to leave it up
+        // to a client's strategy to handle reuse of trx instances. This plugin is just
+        // a thin overlay between db-store plugins and Seneca users.
     }
     async rollback() {
         var _a;
         const trx = (_a = Intern.tryGetTrx(this.seneca)) !== null && _a !== void 0 ? _a : null;
         await this.strategy.rollbackTrx(this.seneca, trx);
+    }
+    // NOTE: We are making this method future-proof by declaring it as async. This
+    // method will likely be used together with `await seneca.transaction().start()`
+    // anyway.
+    //
+    async current() {
+        var _a;
+        return (_a = Intern.tryGetTrx(this.seneca)) !== null && _a !== void 0 ? _a : null;
     }
 }
 class Intern {
