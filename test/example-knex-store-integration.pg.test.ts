@@ -1,7 +1,7 @@
 import { EventEmitter } from 'node:events'
 import Knex from 'knex'
 import EntityTransaction from '..'
-import MysqlTestDbConfig from './support/mysql/config.ts'
+import PgTestDbConfig from './support/pg/config.ts'
 import StoreBase from './support/StoreBase.ts'
 
 const Seneca = require('seneca')
@@ -9,11 +9,11 @@ const SenecaEntity = require('seneca-entity')
 const once = require('lodash.once')
 
 
-describe('example mysql knex store integration', () => {
+describe('example pg knex store integration', () => {
   let knex
 
   beforeAll(() => {
-    knex = Knex(MysqlTestDbConfig)
+    knex = Knex(PgTestDbConfig)
   })
 
   afterAll((fin) => {
@@ -26,7 +26,7 @@ describe('example mysql knex store integration', () => {
   })
 
 
-  class MyExampleKnexMysqlStore extends StoreBase {
+  class MyExampleKnexPgStore extends StoreBase {
     constructor(name, opts) {
       super(name)
 
@@ -58,7 +58,8 @@ describe('example mysql knex store integration', () => {
       const db_client = this._dbClient(seneca, this.knex)
 
       db_client(tablename).insert(seneca.util.clean(msg.ent))
-	.then(([id]) => reply(null, { id }))
+	.returning('id')
+	.then(([{ id }]) => reply(null, { id }))
 	.catch(err => this.interceptStoreError(err, reply))
     }
 
@@ -73,10 +74,10 @@ describe('example mysql knex store integration', () => {
   }
 
 
-  describe('example knex store with integration', () => {
+  describe('example pg knex store with integration', () => {
     function MyExampleKnexStorePlugin(opts) {
       const seneca = this
-      const my_store = new MyExampleKnexMysqlStore('MyKnexStore', opts)
+      const my_store = new MyExampleKnexPgStore('MyKnexStore', opts)
 
 
       const trx_integration_api = trxIntegrationApi(seneca) ?? null
@@ -1451,10 +1452,10 @@ describe('example mysql knex store integration', () => {
     })
   })
 
-  describe('example knex store without integration', () => {
+  describe('example pg knex store without integration', () => {
     function MyExampleKnexStorePlugin(opts) {
       const seneca = this
-      const my_store = new MyExampleKnexMysqlStore('MyPrecious', opts)
+      const my_store = new MyExampleKnexPgStore('MyPrecious', opts)
 
       this.store.init(this, opts, my_store.asSenecaStore())
     }
