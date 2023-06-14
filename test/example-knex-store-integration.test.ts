@@ -2,6 +2,7 @@ import { EventEmitter } from 'node:events'
 import Knex from 'knex'
 import EntityTransaction from '..'
 import MysqlTestDbConfig from './support/mysql/config.ts'
+import StoreBase from './support/StoreBase.ts'
 
 const Seneca = require('seneca')
 const SenecaEntity = require('seneca-entity')
@@ -24,66 +25,52 @@ describe('example knex store integration', () => {
     await knex('seneca_users').delete()
   })
 
+
+  class MyExampleKnexStore extends StoreBase {
+    constructor(name, opts) {
+      super(name)
+
+      this.knex = opts.getKnex()
+      this.interceptStoreError = opts.interceptStoreError ?? ((err, reply) => reply(err))
+    }
+
+    _dbClient(seneca) {
+      const trxIntegrationApi = seneca.export('entity-transaction/integration') ?? null
+      return trxIntegrationApi?.tryGetTrx(seneca)?.ctx.knex ?? this.knex
+    }
+
+    save(seneca, msg, reply) {
+      const tablename = tableNameOfEntity(msg.ent)
+      
+      if (tablename !== 'seneca_users') {
+	return reply(new Error('The example store only supports the seneca_users entity'))
+      }
+
+
+      const db_client = this._dbClient(seneca, this.knex)
+
+      db_client(tablename).insert(seneca.util.clean(msg.ent))
+	.then(([id]) => reply(null, { id }))
+	.catch(err => this.interceptStoreError(err, reply))
+    }
+  }
+
+  function trxIntegrationApi(seneca) {
+    return seneca.export('entity-transaction/integration') ?? null
+  }
+
+
   describe('example store with integration', () => {
     function MyExampleKnexStorePlugin(opts) {
       const seneca = this
-      const trxIntegrationApi = seneca.export('entity-transaction/integration') ?? null
-      const knex = opts.getKnex()
 
-      const store = {
-	name: 'MyKnexStore',
-
-	save(msg, reply) {
-	  const tablename = tableName(msg.ent)
-	  
-	  if (tablename !== 'seneca_users') {
-	    return reply(new Error('The example store only supports the seneca_users entity'))
-	  }
+      const store = new MyExampleKnexStore('MyKnexStore', opts).asSenecaStore()
+      seneca.store.init(seneca, opts, store)
 
 
-	  const db_client = dbClient(this, knex)
-
-	  db_client(tablename).insert(seneca.util.clean(msg.ent))
-	    .then(([id]) => reply(null, { id }))
-	    .catch(err => opts.interceptStoreError(err, reply))
-	},
-
-	load(msg, reply) {
-	  reply(new Error('not implemented'))
-	},
-
-	list(msg, reply) {
-	  reply(new Error('not implemented'))
-	},
-
-	remove(msg, reply) {
-	  reply(new Error('not implemented'))
-	},
-
-	native(reply) {
-	  reply(new Error('not implemented'))
-	},
-
-	close(reply) {
-	  reply(new Error('not implemented'))
-	}
-      }
-
-      this.store.init(this, opts, store)
-
-
-      if (trxIntegrationApi) {
+      if (trxIntegrationApi(seneca)) {
       	const trx_strategy = opts.getTrxStrategy(knex)
-	trxIntegrationApi.registerStrategy(trx_strategy)
-      }
-
-      function tableName(ent) {
-	const canon = ent.canon$({ object: true })
-	return canon.name
-      }
-
-      function dbClient(seneca, knex) {
-	return trxIntegrationApi?.tryGetTrx(seneca)?.ctx.knex ?? knex
+	trxIntegrationApi(seneca).registerStrategy(trx_strategy)
       }
     }
 
@@ -1414,50 +1401,10 @@ describe('example knex store integration', () => {
 
   describe('example store without integration', () => {
     function MyExampleKnexStorePlugin(opts) {
-      function tableName(ent) {
-	const canon = ent.canon$({ object: true })
-	return canon.name
-      }
-
       const seneca = this
       const knex = opts.getKnex()
 
-      const store = {
-	name: 'MyPrecious',
-
-	save(msg, reply) {
-	  const tablename = tableName(msg.ent)
-	  
-	  if (tablename !== 'seneca_users') {
-	    return reply(new Error('The example store only supports the seneca_users entity'))
-	  }
-
-
-	  knex(tablename).insert(seneca.util.clean(msg.ent))
-	    .then(() => reply())
-	    .catch(reply)
-	},
-
-	load(msg, reply) {
-	  reply(new Error('not implemented'))
-	},
-
-	list(msg, reply) {
-	  reply(new Error('not implemented'))
-	},
-
-	remove(msg, reply) {
-	  reply(new Error('not implemented'))
-	},
-
-	native(reply) {
-	  reply(new Error('not implemented'))
-	},
-
-	close(reply) {
-	  reply(new Error('not implemented'))
-	}
-      }
+      const store = new MyExampleKnexStore('MyPrecious', opts).asSenecaStore()
 
       this.store.init(this, opts, store)
     }
@@ -1518,3 +1465,10 @@ async function countRecords(knex) {
   const c = await knex.count('id', { as: 'count' }).first()
   return Number(c.count)
 }
+
+
+function tableNameOfEntity(ent) {
+  const canon = ent.canon$({ object: true })
+  return canon.name
+}
+

@@ -69,13 +69,40 @@ class TrxApi {
   }
 
   async commit() {
+    // QUESTION: Why can't we implement support for nested transactions in this
+    // plugin, instead of leaving it up to db-store plugins and their strategies
+    // to implement them?
+    //
+    //
+    // ANSWER: TL;DR, here's an example. Assume a db-store plugin uses a db
+    // whose driver supports nested transactions.
+    //
+    // Now, how would you handle the start-start-rollback-commit scenario without
+    // having the intimate knowledge of the db state, that only the db-store
+    // plugin's db client has? Take a look:
+    // ```
+    // const senecatrx = await this.transaction().start()
+    // await senecatrx.entity('user').data$(bob).save$()
+    //
+    // const nestedtrx = await senecatrx.transaction().start()
+    // await nestedtrx.entity('user').data$(alice).save$()
+    // await nestedtrx.transaction().rollback()
+    //
+    // await senecatrx.transaction().commit()
+    // ```
+    //
+    // In the code snippet above, the expected result is for Bob to be saved
+    // to the db, but not Alice. The db client does that book-keeping for us
+    // for free.
+
     const trx = Intern.tryGetTrx(this.seneca) ?? null
     await this.strategy.commitTrx(this.seneca, trx)
 
-    // NOTE: You may wonder, how come we are not null-ifying completed transactions.
-    // We are not null-ifying completed transactions because we want to leave it up
-    // to a client's strategy to handle reuse of trx instances. This plugin is just
-    // a thin overlay between db-store plugins and Seneca users.
+    // QUESTION: Why are we are not null-ifying completed transactions?
+    //
+    // ANSWER: We are not null-ifying completed transactions because we want to leave
+    // it up to a client's strategy to handle reuse of trx instances. This plugin is
+    // just a thin overlay between db-store plugins and Seneca users.
   }
 
   async rollback() {

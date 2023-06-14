@@ -1,6 +1,7 @@
 import EntityTransaction from '..'
 import MysqlTestDbConfig from './support/mysql/config.ts'
 import MysqlHelpers from './support/mysql/helpers.ts'
+import StoreBase from './support/StoreBase.ts'
 
 const Seneca = require('seneca')
 const SenecaEntity = require('seneca-entity')
@@ -43,81 +44,62 @@ describe('example mysql store integration', () => {
   })
 
 
-  function MyPreciousStorePlugin(opts) {
-    const trxIntegrationApi = this.export('entity-transaction/integration') ?? null
+  class MyExampleMysqlStore extends StoreBase {
+      constructor(name, opts) {
+      	super(name)
 
-    class MyPreciousStorePluginStrategy {
-      constructor(db) {
-      	this.db = db
+      	this.db = opts.getConnection()
       }
 
-      async startTrx(_seneca, pending_trx = null) {
-      	if (pending_trx) {
-      	  throw new Error('There is a pending trx already. Starting a new trx would cause an implicit commit.')
-	}
-
-	await this.db.query('START TRANSACTION')
-	return null
-      }
-
-      async commitTrx(_seneca, trx) {
-	await this.db.query('COMMIT')
-      }
-
-      async rollbackTrx(_seneca, trx) {
-	await this.db.query('ROLLBACK')
-      }
-    }
-
-    function tableName(ent) {
-      const canon = ent.canon$({ object: true })
-      return canon.name
-    }
-
-    const seneca = this
-    const db = opts.getConnection()
-
-    const store = {
-      name: 'MyPrecious',
-
-      save(msg, reply) {
-	const tablename = tableName(msg.ent)
+      save(seneca, msg, reply) {
+	const tablename = tableNameOfEntity(msg.ent)
 	
 	if (tablename !== 'seneca_users') {
 	  return reply(new Error('The example store only supports the seneca_users entity'))
 	}
 
-	MysqlHelpers.saveRecord(db, tablename, seneca.util.clean(msg.ent))
+	MysqlHelpers.saveRecord(this.db, tablename, seneca.util.clean(msg.ent))
 	  .then(() => reply())
 	  .catch(reply)
-      },
-
-      load(msg, reply) {
-	reply(new Error('not implemented'))
-      },
-
-      list(msg, reply) {
-	reply(new Error('not implemented'))
-      },
-
-      remove(msg, reply) {
-	reply(new Error('not implemented'))
-      },
-
-      native(reply) {
-	reply(new Error('not implemented'))
-      },
-
-      close(reply) {
-	reply(new Error('not implemented'))
       }
+  }
+
+  function trxIntegrationApi(seneca) {
+    return seneca.export('entity-transaction/integration') ?? null
+  }
+
+  class MyPreciousStorePluginStrategy {
+    constructor(db) {
+      this.db = db
     }
 
-    this.store.init(this, opts, store)
+    async startTrx(_seneca, pending_trx = null) {
+      if (pending_trx) {
+	throw new Error('There is a pending trx already. Starting a new trx would cause an implicit commit.')
+      }
 
+      await this.db.query('START TRANSACTION')
+      return null
+    }
 
-    if (trxIntegrationApi) {
-      trxIntegrationApi.registerStrategy(new MyPreciousStorePluginStrategy(db))
+    async commitTrx(_seneca, trx) {
+      await this.db.query('COMMIT')
+    }
+
+    async rollbackTrx(_seneca, trx) {
+      await this.db.query('ROLLBACK')
+    }
+  }
+
+  function MyPreciousStorePlugin(opts) {
+    const seneca = this
+
+    const store = new MyExampleMysqlStore('MyPrecious', opts).asSenecaStore()
+    seneca.store.init(seneca, opts, store)
+
+    if (trxIntegrationApi(seneca)) {
+      const db = opts.getConnection()
+      trxIntegrationApi(seneca).registerStrategy(new MyPreciousStorePluginStrategy(db))
     }
   }
 
@@ -519,3 +501,10 @@ async function saveUser(seneca, data) {
       })
   })
 }
+
+
+function tableNameOfEntity(ent) {
+  const canon = ent.canon$({ object: true })
+  return canon.name
+}
+
