@@ -15,10 +15,13 @@ declare type Trx<TCtx> = {
 declare type Option<T> = null | {
     value: T;
 };
+declare type startTrxOptions = {};
+declare type commitTrxOptions = {};
+declare type rollbackTrxOptions = {};
 interface ITrxStrategy<TCtx> {
-    startTrx(seneca: Seneca): Promise<TCtx>;
-    commitTrx(seneca: Seneca): Promise<void>;
-    rollbackTrx(seneca: Seneca): Promise<void>;
+    startTrx(seneca: Seneca, opts?: startTrxOptions): Promise<TCtx>;
+    commitTrx(seneca: Seneca, opts?: commitTrxOptions): Promise<void>;
+    rollbackTrx(seneca: Seneca, opts?: rollbackTrxOptions): Promise<void>;
 }
 declare class Intern {
     static getTrx<TCtx>(seneca: Seneca): Trx<TCtx> | void;

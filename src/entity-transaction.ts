@@ -21,10 +21,15 @@ type Option<T> =
   | null
   | { value: T }
 
+
+type startTrxOptions = {} // reserved for future use
+type commitTrxOptions = {} // reserved for future use
+type rollbackTrxOptions = {} // reserved for future use
+
 interface ITrxStrategy<TCtx> {
-  startTrx(seneca: Seneca): Promise<TCtx>
-  commitTrx(seneca: Seneca): Promise<void>
-  rollbackTrx(seneca: Seneca): Promise<void>
+  startTrx(seneca: Seneca, opts?: startTrxOptions): Promise<TCtx>
+  commitTrx(seneca: Seneca, opts?: commitTrxOptions): Promise<void>
+  rollbackTrx(seneca: Seneca, opts?: rollbackTrxOptions): Promise<void>
 }
 
 type TrxApiConstructorArgs<TCtx> = {
