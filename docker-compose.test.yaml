@@ -2,7 +2,7 @@ version: "3.7"
 
 services:
   postgres_test:
-    build: ./test/support/docker
+    build: ./test/support/pg
     ports:
      - "5432:5432"
     environment:
