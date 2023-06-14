@@ -27,12 +27,12 @@ describe('example knex store integration', () => {
 
 
   class MyExampleKnexStore extends StoreBase {
-    constructor(name, trx_integration_api, opts) {
+    constructor(name, opts) {
       super(name)
 
       this.knex = opts.getKnex()
       this.interceptStoreError = opts.interceptStoreError ?? ((err, reply) => reply(err))
-      this.trx_integration_api = trx_integration_api
+      this.trx_integration_api = null
     }
 
     _dbClient(seneca) {
@@ -61,6 +61,11 @@ describe('example knex store integration', () => {
 	.then(([id]) => reply(null, { id }))
 	.catch(err => this.interceptStoreError(err, reply))
     }
+
+    enableTransactions(trx_integration_api, trx_strategy) {
+      this.trx_integration_api = trx_integration_api
+      trx_integration_api.registerStrategy(trx_strategy)
+    }
   }
 
   function trxIntegrationApi(seneca) {
@@ -71,17 +76,18 @@ describe('example knex store integration', () => {
   describe('example knex store with integration', () => {
     function MyExampleKnexStorePlugin(opts) {
       const seneca = this
+      const my_store = new MyExampleKnexStore('MyKnexStore', opts)
+
+
       const trx_integration_api = trxIntegrationApi(seneca) ?? null
-
-
-      const store = new MyExampleKnexStore('MyKnexStore', trx_integration_api, opts).asSenecaStore()
-      seneca.store.init(seneca, opts, store)
-
 
       if (trx_integration_api) {
       	const trx_strategy = opts.getTrxStrategy(knex, trx_integration_api)
-	trx_integration_api.registerStrategy(trx_strategy)
+      	my_store.enableTransactions(trx_integration_api, trx_strategy)
       }
+
+
+      seneca.store.init(seneca, opts, my_store.asSenecaStore())
     }
 
     // NOTE: Trx strategies are supposed to be implemented by store plugins. For example,
@@ -1448,9 +1454,9 @@ describe('example knex store integration', () => {
   describe('example knex store without integration', () => {
     function MyExampleKnexStorePlugin(opts) {
       const seneca = this
-      const store = new MyExampleKnexStore('MyPrecious', null, opts).asSenecaStore()
+      const my_store = new MyExampleKnexStore('MyPrecious', opts)
 
-      this.store.init(this, opts, store)
+      this.store.init(this, opts, my_store.asSenecaStore())
     }
 
 
