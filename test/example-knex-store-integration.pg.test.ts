@@ -1416,9 +1416,112 @@ describe('example pg knex store integration', () => {
 
 	    expect(user_bob.id).toBeTruthy()
 	    expect(notifyPersonalManager).toHaveBeenCalledWith(user_bob.id)
+	    expect(notifyPersonalManager.mock.calls.length).toEqual(1)
 
 	    expect(user_alice.id).toBeTruthy()
 	    expect(emailPremiumCustomer).toHaveBeenCalledWith(user_alice.id)
+	    expect(emailPremiumCustomer.mock.calls.length).toEqual(1)
+
+	    fin()
+	  })
+	})
+      })
+
+      test('post-commit hooks can be implemented in a way they ignore repeated commits of a master trx', (fin_) => {
+	const fin = once(fin_)
+
+	const seneca = Seneca().test(fin)
+	seneca.use(SenecaEntity)
+	seneca.use(EntityTransaction)
+
+	seneca.use(MyExampleKnexStorePlugin, {
+	  getKnex() {
+	    return knex
+	  },
+
+	  getTrxStrategy: makeTrxStrategyWithPostCommitHooksSupport
+	})
+
+
+	const notifyPersonalManager = jest.fn()
+	const emailPremiumCustomer = jest.fn()
+
+	let user_alice
+	let user_bob
+
+
+	seneca.add('cmd:createPersonalManager', function (msg, reply) {
+	  async function impl() {
+	    const senecatrx = await this.transaction().start()
+
+	    user_bob = await saveUser(senecatrx, {
+	      username: 'bob456',
+	      email: 'bob@example.com'
+	    })
+
+
+	    const { value: trxctx } = await senecatrx.transaction().getContext()
+
+	    trxctx.events.once('afterMasterCommit', () => {
+	      notifyPersonalManager(user_bob.id)
+	    })
+
+
+	    await senecatrx.transaction().commit()
+	  }
+
+	  impl.call(this)
+	    .then(() => reply())
+	    .catch(reply)
+	})
+
+	seneca.add('cmd:createPremiumCustomer', function (msg, reply) {
+	  async function impl() {
+	    const senecatrx = await this.transaction().start()
+
+	    user_alice = await saveUser(senecatrx, {
+	      username: 'alice123',
+	      email: 'alice@example.com'
+	    })
+
+
+	    const { value: trxctx } = await senecatrx.transaction().getContext()
+
+	    trxctx.events.once('afterMasterCommit', () => {
+	      emailPremiumCustomer(user_alice.id)
+	    })
+
+
+	    await new Promise((resolve, reject) => {
+	      senecatrx.act('cmd:createPersonalManager', function (err) {
+		if (err) return reject(err)
+		resolve()
+	      })
+	    })
+
+
+	    await senecatrx.transaction().commit()
+	    await senecatrx.transaction().commit()
+	    await senecatrx.transaction().commit()
+	    await senecatrx.transaction().commit()
+	  }
+
+	  impl.call(this)
+	    .then(() => reply())
+	    .catch(reply)
+	})
+
+	seneca.ready(function () {
+	  seneca.act('cmd:createPremiumCustomer', function (err) {
+	    if (err) return fin(err)
+
+	    expect(user_bob.id).toBeTruthy()
+	    expect(notifyPersonalManager).toHaveBeenCalledWith(user_bob.id)
+	    expect(notifyPersonalManager.mock.calls.length).toEqual(1)
+
+	    expect(user_alice.id).toBeTruthy()
+	    expect(emailPremiumCustomer).toHaveBeenCalledWith(user_alice.id)
+	    expect(emailPremiumCustomer.mock.calls.length).toEqual(1)
 
 	    fin()
 	  })

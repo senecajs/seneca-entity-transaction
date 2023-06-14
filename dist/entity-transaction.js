@@ -86,6 +86,9 @@ class TrxApi {
         // ANSWER: We are not null-ifying completed transactions because we want
         // to leave it up to a client's strategy to handle reuse of trx instances.
         //
+        // Some db clients allow double commits, in which case the repeated commits
+        // are ignored. We want to keep this behavior transparent.
+        //
         // This plugin is just a thin overlay between db-store plugins and Seneca
         // users.
     }
