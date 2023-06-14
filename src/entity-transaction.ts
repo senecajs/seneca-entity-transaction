@@ -1,32 +1,48 @@
 /* Copyright © 2021-2022 Richard Rodger, MIT License. */
 
+declare class Seneca {
+  decorate<TDecorator>(name: string, value: TDecorator): void
+  delegate<TFixedArgs, TFixedMeta>(fixedargs: TFixedArgs, fixedmeta: TFixedMeta): Seneca
 
-type Trx = {
-  ctx: any
+  fixedmeta?: {
+    custom?: {
+      entity_transaction?: {
+	trx: Trx<any>
+      }
+    }
+  }
 }
 
-interface ITrxStrategy {
-  startTrx(seneca: any, pending_trx?: Trx): Promise<any>
-  commitTrx(seneca: any, trx: Trx): Promise<any>
-  rollbackTrx(seneca: any, trx: Trx): Promise<any>
+type Trx<TCtx> = {
+  ctx: TCtx
 }
 
-type TrxApiConstructorArgs = {
-  seneca: any
-  strategy: ITrxStrategy
+type Option<T> =
+  | null
+  | { value: T }
+
+interface ITrxStrategy<TCtx> {
+  startTrx(seneca: Seneca): Promise<TCtx>
+  commitTrx(seneca: Seneca): Promise<void>
+  rollbackTrx(seneca: Seneca): Promise<void>
+}
+
+type TrxApiConstructorArgs<TCtx> = {
+  seneca: Seneca
+  strategy: ITrxStrategy<TCtx>
 }
 
 
-class TrxApi {
-  seneca: any
-  strategy: ITrxStrategy
+class TrxApi<TCtx> {
+  seneca: Seneca
+  strategy: ITrxStrategy<TCtx>
 
-  constructor(args: TrxApiConstructorArgs) {
+  constructor(args: TrxApiConstructorArgs<TCtx>) {
     this.seneca = args.seneca
     this.strategy = args.strategy
   }
 
-  async start() {
+  async start(): Promise<Seneca> {
     /*
     // NOTE: The purpose of retrieving pending transactions is as follows. Many db clients
     // implement support for nested transactions. Which means that, by retrieving pending trx
@@ -39,16 +55,14 @@ class TrxApi {
     //const pending_trx = Intern.tryGetPendingTrxOfDelegateOrParentInstance(this.seneca) ?? null
     */
 
-    const pending_trx = Intern.tryGetTrx(this.seneca) ?? null
-
     // NOTE: If a transaction already exists, we __must__ nonetheless invoke the startTrx
     // hook because:
     // - client's strategy may utilize a db client which supports nested transactions
     // - client's strategy may implement custom logic to handle nested transactions
 
-    const ctx = await this.strategy.startTrx(this.seneca, pending_trx)
+    const ctx: TCtx = await this.strategy.startTrx(this.seneca)
 
-    const trx: Trx = {
+    const trx: Trx<TCtx> = {
       ctx
     }
 
@@ -57,7 +71,7 @@ class TrxApi {
     // the mysql2 driver) or support nested transactions directly. Therefore,
     // a nested transaction's handle, too, must be stored.
     //
-    const seneca_trx = this.seneca.delegate(null, {
+    const seneca_trx: Seneca = this.seneca.delegate(null, {
       custom: {
 	entity_transaction: {
 	  trx
@@ -95,8 +109,7 @@ class TrxApi {
     // to the db, but not Alice. The db client does that book-keeping for us
     // for free.
 
-    const trx = Intern.tryGetTrx(this.seneca) ?? null
-    await this.strategy.commitTrx(this.seneca, trx)
+    await this.strategy.commitTrx(this.seneca)
 
     // QUESTION: Why are we are not null-ifying completed transactions?
     //
@@ -106,23 +119,29 @@ class TrxApi {
   }
 
   async rollback() {
-    const trx = Intern.tryGetTrx(this.seneca) ?? null
-    await this.strategy.rollbackTrx(this.seneca, trx)
+    await this.strategy.rollbackTrx(this.seneca)
   }
 
-  // NOTE: We are making this method future-proof by declaring it as async. This
-  // method will likely be used together with `await seneca.transaction().start()`
-  // anyway.
-  //
-  async current() {
-    return Intern.tryGetTrx(this.seneca) ?? null
+  getContext(): Option<TCtx> {
+    return Intern.getContext(this.seneca)
   }
 }
 
 
 class Intern {
-  static tryGetTrx(seneca: any) {
+  static getTrx<TCtx>(seneca: Seneca): Trx<TCtx> | void {
     return seneca.fixedmeta?.custom?.entity_transaction?.trx
+  }
+
+  static getContext<TCtx>(seneca: Seneca): Option<TCtx> {
+    const trx = Intern.getTrx(seneca)
+
+    if (trx) {
+      const ctx = trx.ctx as TCtx
+      return { value: ctx }
+    }
+
+    return null
   }
 
   /*
@@ -163,11 +182,11 @@ class Intern {
 }
 
 
-function entity_transaction(this: any) {
-  let strategy: null | ITrxStrategy = null
+function entity_transaction(this: Seneca) {
+  let strategy: null | ITrxStrategy<any> = null
 
 
-  this.decorate('transaction', function (this: any) {
+  this.decorate('transaction', function (this: Seneca) {
     if (!strategy) {
       throw new Error('Before you may use the entity-transaction plugin,' +
       	" please use this plugin's registerStrategy export to register" +
@@ -178,7 +197,7 @@ function entity_transaction(this: any) {
   })
 
 
-  function registerStrategy(strategy_?: ITrxStrategy) {
+  function registerStrategy<TCtx>(strategy_?: ITrxStrategy<TCtx>) {
     // NOTE: This is user-facing code to help vanilla JS users catch missing overrides.
     //
     if (null == strategy_) {
@@ -229,7 +248,7 @@ function entity_transaction(this: any) {
     exports: {
       integration: {
 	registerStrategy,
-	tryGetTrx: Intern.tryGetTrx
+	getContext: Intern.getContext
       }
     }
   }

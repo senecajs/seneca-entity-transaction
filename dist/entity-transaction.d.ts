@@ -1,20 +1,35 @@
-declare type Trx = {
-    ctx: any;
+declare class Seneca {
+    decorate<TDecorator>(name: string, value: TDecorator): void;
+    delegate<TFixedArgs, TFixedMeta>(fixedargs: TFixedArgs, fixedmeta: TFixedMeta): Seneca;
+    fixedmeta?: {
+        custom?: {
+            entity_transaction?: {
+                trx: Trx<any>;
+            };
+        };
+    };
+}
+declare type Trx<TCtx> = {
+    ctx: TCtx;
 };
-interface ITrxStrategy {
-    startTrx(seneca: any, pending_trx?: Trx): Promise<any>;
-    commitTrx(seneca: any, trx: Trx): Promise<any>;
-    rollbackTrx(seneca: any, trx: Trx): Promise<any>;
+declare type Option<T> = null | {
+    value: T;
+};
+interface ITrxStrategy<TCtx> {
+    startTrx(seneca: Seneca): Promise<TCtx>;
+    commitTrx(seneca: Seneca): Promise<void>;
+    rollbackTrx(seneca: Seneca): Promise<void>;
 }
 declare class Intern {
-    static tryGetTrx(seneca: any): any;
+    static getTrx<TCtx>(seneca: Seneca): Trx<TCtx> | void;
+    static getContext<TCtx>(seneca: Seneca): Option<TCtx>;
 }
-declare function entity_transaction(this: any): {
+declare function entity_transaction(this: Seneca): {
     name: string;
     exports: {
         integration: {
-            registerStrategy: (strategy_?: ITrxStrategy) => void;
-            tryGetTrx: typeof Intern.tryGetTrx;
+            registerStrategy: <TCtx>(strategy_?: ITrxStrategy<TCtx> | undefined) => void;
+            getContext: typeof Intern.getContext;
         };
     };
 };

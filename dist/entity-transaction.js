@@ -18,13 +18,11 @@ class TrxApi {
         //
         //const pending_trx = Intern.tryGetPendingTrxOfDelegateOrParentInstance(this.seneca) ?? null
         */
-        var _a;
-        const pending_trx = (_a = Intern.tryGetTrx(this.seneca)) !== null && _a !== void 0 ? _a : null;
         // NOTE: If a transaction already exists, we __must__ nonetheless invoke the startTrx
         // hook because:
         // - client's strategy may utilize a db client which supports nested transactions
         // - client's strategy may implement custom logic to handle nested transactions
-        const ctx = await this.strategy.startTrx(this.seneca, pending_trx);
+        const ctx = await this.strategy.startTrx(this.seneca);
         const trx = {
             ctx
         };
@@ -43,32 +41,57 @@ class TrxApi {
         return seneca_trx;
     }
     async commit() {
-        var _a;
-        const trx = (_a = Intern.tryGetTrx(this.seneca)) !== null && _a !== void 0 ? _a : null;
-        await this.strategy.commitTrx(this.seneca, trx);
-        // NOTE: You may wonder, how come we are not null-ifying completed transactions.
-        // We are not null-ifying completed transactions because we want to leave it up
-        // to a client's strategy to handle reuse of trx instances. This plugin is just
-        // a thin overlay between db-store plugins and Seneca users.
+        // QUESTION: Why can't we implement support for nested transactions in this
+        // plugin, instead of leaving it up to db-store plugins and their strategies
+        // to implement them?
+        //
+        //
+        // ANSWER: TL;DR, here's an example. Assume a db-store plugin uses a db
+        // whose driver supports nested transactions.
+        //
+        // Now, how would you handle the start-start-rollback-commit scenario without
+        // having the intimate knowledge of the db state, that only the db-store
+        // plugin's db client has? Take a look:
+        // ```
+        // const senecatrx = await this.transaction().start()
+        // await senecatrx.entity('user').data$(bob).save$()
+        //
+        // const nestedtrx = await senecatrx.transaction().start()
+        // await nestedtrx.entity('user').data$(alice).save$()
+        // await nestedtrx.transaction().rollback()
+        //
+        // await senecatrx.transaction().commit()
+        // ```
+        //
+        // In the code snippet above, the expected result is for Bob to be saved
+        // to the db, but not Alice. The db client does that book-keeping for us
+        // for free.
+        await this.strategy.commitTrx(this.seneca);
+        // QUESTION: Why are we are not null-ifying completed transactions?
+        //
+        // ANSWER: We are not null-ifying completed transactions because we want to leave
+        // it up to a client's strategy to handle reuse of trx instances. This plugin is
+        // just a thin overlay between db-store plugins and Seneca users.
     }
     async rollback() {
-        var _a;
-        const trx = (_a = Intern.tryGetTrx(this.seneca)) !== null && _a !== void 0 ? _a : null;
-        await this.strategy.rollbackTrx(this.seneca, trx);
+        await this.strategy.rollbackTrx(this.seneca);
     }
-    // NOTE: We are making this method future-proof by declaring it as async. This
-    // method will likely be used together with `await seneca.transaction().start()`
-    // anyway.
-    //
-    async current() {
-        var _a;
-        return (_a = Intern.tryGetTrx(this.seneca)) !== null && _a !== void 0 ? _a : null;
+    getContext() {
+        return Intern.getContext(this.seneca);
     }
 }
 class Intern {
-    static tryGetTrx(seneca) {
+    static getTrx(seneca) {
         var _a, _b, _c;
         return (_c = (_b = (_a = seneca.fixedmeta) === null || _a === void 0 ? void 0 : _a.custom) === null || _b === void 0 ? void 0 : _b.entity_transaction) === null || _c === void 0 ? void 0 : _c.trx;
+    }
+    static getContext(seneca) {
+        const trx = Intern.getTrx(seneca);
+        if (trx) {
+            const ctx = trx.ctx;
+            return { value: ctx };
+        }
+        return null;
     }
 }
 function entity_transaction() {
@@ -124,7 +147,7 @@ function entity_transaction() {
         exports: {
             integration: {
                 registerStrategy,
-                tryGetTrx: Intern.tryGetTrx
+                getContext: Intern.getContext
             }
         }
     };
