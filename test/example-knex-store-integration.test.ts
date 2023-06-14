@@ -27,16 +27,24 @@ describe('example knex store integration', () => {
 
 
   class MyExampleKnexStore extends StoreBase {
-    constructor(name, opts) {
+    constructor(name, trx_integration_api, opts) {
       super(name)
 
       this.knex = opts.getKnex()
       this.interceptStoreError = opts.interceptStoreError ?? ((err, reply) => reply(err))
+      this.trx_integration_api = trx_integration_api
     }
 
     _dbClient(seneca) {
-      const trxIntegrationApi = seneca.export('entity-transaction/integration') ?? null
-      return trxIntegrationApi?.tryGetTrx(seneca)?.ctx.knex ?? this.knex
+      if (this.trx_integration_api) {
+	const maybe_pending_trxctx = this.trx_integration_api.getContext(seneca)
+
+	if (maybe_pending_trxctx && maybe_pending_trxctx.value) {
+	  return maybe_pending_trxctx.value.knex
+	}
+      }
+
+      return this.knex
     }
 
     save(seneca, msg, reply) {
@@ -60,39 +68,46 @@ describe('example knex store integration', () => {
   }
 
 
-  describe('example store with integration', () => {
+  describe('example knex store with integration', () => {
     function MyExampleKnexStorePlugin(opts) {
       const seneca = this
+      const trx_integration_api = trxIntegrationApi(seneca) ?? null
 
-      const store = new MyExampleKnexStore('MyKnexStore', opts).asSenecaStore()
+
+      const store = new MyExampleKnexStore('MyKnexStore', trx_integration_api, opts).asSenecaStore()
       seneca.store.init(seneca, opts, store)
 
 
-      if (trxIntegrationApi(seneca)) {
-      	const trx_strategy = opts.getTrxStrategy(knex)
-	trxIntegrationApi(seneca).registerStrategy(trx_strategy)
+      if (trx_integration_api) {
+      	const trx_strategy = opts.getTrxStrategy(knex, trx_integration_api)
+	trx_integration_api.registerStrategy(trx_strategy)
       }
     }
 
     // NOTE: Trx strategies are supposed to be implemented by store plugins. For example,
     // in this scenario - it's the example store plugin.
     //
-    function makeSimpleTrxStrategy(knex) {
+    function makeSimpleTrxStrategy(knex, trx_integration_api) {
       const trx_strategy = {
-	async startTrx(seneca, pending_trx = null) {
-	  if (pending_trx) {
-	    return { knex: await pending_trx.ctx.knex.transaction() }
+	async startTrx(seneca) {
+	  const maybe_pending_trxctx = trx_integration_api.getContext(seneca)
+
+	  if (maybe_pending_trxctx) {
+	    const { value: trxctx } = maybe_pending_trxctx
+	    return { knex: await trxctx.knex.transaction() }
 	  }
 
 	  return { knex: await knex.transaction() }
 	},
 
-	async commitTrx(_seneca, trx) {
-	  await trx.ctx.knex.commit()
+	async commitTrx(seneca) {
+	  const { value: ctx } = trx_integration_api.getContext(seneca)
+	  await ctx.knex.commit()
 	},
 
-	async rollbackTrx(_seneca, trx) {
-	  await trx.ctx.knex.rollback()
+	async rollbackTrx(seneca) {
+	  const { value: ctx } = trx_integration_api.getContext(seneca)
+	  await ctx.knex.rollback()
 	}
       }
 
@@ -1176,14 +1191,43 @@ describe('example knex store integration', () => {
     })
 
     describe('store strategy implementing post-commit hooks', () => {
-      function makeTrxStrategyWithPostCommitHooksSupport(knex) {
+      function makeTrxStrategyWithPostCommitHooksSupport(knex, trx_integration_api) {
+      	/*
+      const trx_strategy = {
+	async startTrx(seneca) {
+	  const maybe_pending_trxctx = trx_integration_api.getContext(seneca)
+
+	  if (maybe_pending_trxctx) {
+	    const { value: trxctx } = maybe_pending_trxctx
+	    return { knex: await trxctx.knex.transaction() }
+	  }
+
+	  return { knex: await knex.transaction() }
+	},
+
+	async commitTrx(seneca) {
+	  const { value: ctx } = trx_integration_api.getContext(seneca)
+	  await ctx.knex.commit()
+	},
+
+	async rollbackTrx(seneca) {
+	  const { value: ctx } = trx_integration_api.getContext(seneca)
+	  await ctx.knex.rollback()
+	}
+      }
+	*/
+
 	const trx_strategy = {
-	  async startTrx(seneca, pending_trx = null) {
-	    if (pending_trx) {
+	  async startTrx(seneca) {
+	    const maybe_pending_trxctx = trx_integration_api.getContext(seneca)
+
+	    if (maybe_pending_trxctx) {
+	      const { value: pending_trxctx } = maybe_pending_trxctx
+
 	      return {
 	      	is_master: false,
-	      	events: pending_trx.ctx.events,
-		knex: await pending_trx.ctx.knex.transaction()
+	      	events: pending_trxctx.events,
+		knex: await pending_trxctx.knex.transaction()
 	      }
 	    }
 
@@ -1194,19 +1238,21 @@ describe('example knex store integration', () => {
 	    }
 	  },
 
-	  async commitTrx(_seneca, trx) {
-	    await trx.ctx.knex.commit()
+	  async commitTrx(seneca) {
+	    const { value: trxctx } = trx_integration_api.getContext(seneca)
+	    await trxctx.knex.commit()
 
-	    if (trx.ctx.is_master) {
-	      trx.ctx.events.emit('afterMasterCommit')
+	    if (trxctx.is_master) {
+	      trxctx.events.emit('afterMasterCommit')
 	    }
 	  },
 
-	  async rollbackTrx(_seneca, trx) {
-	    await trx.ctx.knex.rollback()
+	  async rollbackTrx(seneca) {
+	    const { value: trxctx } = trx_integration_api.getContext(seneca)
+	    await trxctx.knex.rollback()
 
-	    if (trx.ctx.is_master) {
-	      trx.ctx.events.emit('afterMasterRollback')
+	    if (trxctx.is_master) {
+	      trxctx.events.emit('afterMasterRollback')
 	    }
 	  }
 	}
@@ -1237,9 +1283,9 @@ describe('example knex store integration', () => {
 	seneca.add('cmd:createPersonalManager', function (msg, reply) {
 	  async function impl() {
 	    const senecatrx = await this.transaction().start()
-	    const trx = await senecatrx.transaction().current()
+	    const { value: trxctx } = senecatrx.transaction().getContext()
 
-	    trx.ctx.events.once('afterMasterCommit', () => {
+	    trxctx.events.once('afterMasterCommit', () => {
 	      notifyPersonalManager()
 	    })
 
@@ -1261,9 +1307,9 @@ describe('example knex store integration', () => {
 	seneca.add('cmd:createPremiumCustomer', function (msg, reply) {
 	  async function impl() {
 	    const senecatrx = await this.transaction().start()
-	    const trx = await senecatrx.transaction().current()
+	    const { value: trxctx } = senecatrx.transaction().getContext()
 
-	    trx.ctx.events.once('afterMasterCommit', () => {
+	    trxctx.events.once('afterMasterCommit', () => {
 	      emailPremiumCustomer()
 	    })
 
@@ -1334,9 +1380,9 @@ describe('example knex store integration', () => {
 	    })
 
 
-	    const trx = await senecatrx.transaction().current()
+	    const { value: trxctx } = await senecatrx.transaction().getContext()
 
-	    trx.ctx.events.once('afterMasterCommit', () => {
+	    trxctx.events.once('afterMasterCommit', () => {
 	      notifyPersonalManager(user_bob.id)
 	    })
 
@@ -1359,9 +1405,9 @@ describe('example knex store integration', () => {
 	    })
 
 
-	    const trx = await senecatrx.transaction().current()
+	    const { value: trxctx } = await senecatrx.transaction().getContext()
 
-	    trx.ctx.events.once('afterMasterCommit', () => {
+	    trxctx.events.once('afterMasterCommit', () => {
 	      emailPremiumCustomer(user_alice.id)
 	    })
 
@@ -1399,12 +1445,10 @@ describe('example knex store integration', () => {
     })
   })
 
-  describe('example store without integration', () => {
+  describe('example knex store without integration', () => {
     function MyExampleKnexStorePlugin(opts) {
       const seneca = this
-      const knex = opts.getKnex()
-
-      const store = new MyExampleKnexStore('MyPrecious', opts).asSenecaStore()
+      const store = new MyExampleKnexStore('MyPrecious', null, opts).asSenecaStore()
 
       this.store.init(this, opts, store)
     }

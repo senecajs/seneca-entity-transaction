@@ -16,27 +16,32 @@ describe('entity-transaction', () => {
     let trx_handle
 
     function MyTrxPlugin() {
-	const trx_strategy = {
-	  async startTrx(_seneca) {
-	    trx_handle = {
-	      name: "pretend I'm a T-Rex",
-	      async commit() {},
-	      async rollback() {}
-	    }
+      const seneca = this
+      const trx_integration_api = seneca.export('entity-transaction/integration')
 
-	    return trx_handle
-	  },
-
-	  async commitTrx(_seneca, trx) {
-	    await trx.ctx.commit()
-	  },
-
-	  async rollbackTrx(_seneca, trx) {
-	    await trx.ctx.rollback()
+      const trx_strategy = {
+	async startTrx() {
+	  trx_handle = {
+	    name: "pretend I'm a T-Rex",
+	    async commit() {},
+	    async rollback() {}
 	  }
-	}
 
-	this.export('entity-transaction/integration').registerStrategy(trx_strategy)
+	  return trx_handle
+	},
+
+	async commitTrx(seneca) {
+	  const { value: trxctx } = trx_integration_api.getContext(seneca)
+	  await trxctx.commit()
+	},
+
+	async rollbackTrx(seneca) {
+	  const { value: trxctx } = trx_integration_api.getContext(seneca)
+	  await trxctx.rollback()
+	}
+      }
+
+      trx_integration_api.registerStrategy(trx_strategy)
     }
 
 
@@ -79,41 +84,46 @@ describe('entity-transaction', () => {
 
 
     function MyTrxPlugin() {
-	const trx_strategy = {
-	  async startTrx(_seneca) {
-	    if (num_trxs === 0) {
-	      const trx_handle = makeExampleTrxHandle("pretend I'm a T-Rex")
-	      trx_handles.push(trx_handle)
+      const seneca = this
+      const trx_integration_api = seneca.export('entity-transaction/integration')
 
-	      return trx_handle
-	    }
+      const trx_strategy = {
+	async startTrx(_seneca) {
+	  if (num_trxs === 0) {
+	    const trx_handle = makeExampleTrxHandle("pretend I'm a T-Rex")
+	    trx_handles.push(trx_handle)
 
-
-	    if (num_trxs === 1) {
-	      const trx_handle = makeExampleTrxHandle("pretend I'm a mango")
-	      trx_handles.push(trx_handle)
-
-	      return trx_handle
-	    }
-
-
-	    throw new Error(
-	      'This test suite did not expect more than two concurrent trxs be tested'
-	    )
-	  },
-
-
-	  async commitTrx(_seneca, trx) {
-	    await trx.ctx.commit()
-	  },
-
-
-	  async rollbackTrx(_seneca, trx) {
-	    await trx.ctx.rollback()
+	    return trx_handle
 	  }
-	}
 
-	this.export('entity-transaction/integration').registerStrategy(trx_strategy)
+
+	  if (num_trxs === 1) {
+	    const trx_handle = makeExampleTrxHandle("pretend I'm a mango")
+	    trx_handles.push(trx_handle)
+
+	    return trx_handle
+	  }
+
+
+	  throw new Error(
+	    'This test suite did not expect more than two concurrent trxs be tested'
+	  )
+	},
+
+
+	async commitTrx(seneca) {
+	  const { value: trxctx } = trx_integration_api.getContext(seneca)
+	  await trxctx.commit()
+	},
+
+
+	async rollbackTrx(seneca) {
+	  const { value: trxctx } = trx_integration_api.getContext(seneca)
+	  await trxctx.rollback()
+	}
+      }
+
+      trx_integration_api.registerStrategy(trx_strategy)
     }
 
 
@@ -176,11 +186,11 @@ describe('entity-transaction', () => {
       	return 'Pretend I am a T-Rex!'
       }
 
-      commitTrx(trx) {
+      commitTrx() {
       	this.num_committed++
       }
 
-      rollbackTrx(trx) {
+      rollbackTrx() {
       	this.num_rolledback++
       }
     }

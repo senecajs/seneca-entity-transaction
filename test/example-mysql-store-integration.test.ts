@@ -45,10 +45,11 @@ describe('example mysql store integration', () => {
 
 
   class MyExampleMysqlStore extends StoreBase {
-      constructor(name, opts) {
+      constructor(name, trx_integration_api, opts) {
       	super(name)
 
       	this.db = opts.getConnection()
+      	this.trx_integration_api = trx_integration_api
       }
 
       save(seneca, msg, reply) {
@@ -69,12 +70,15 @@ describe('example mysql store integration', () => {
   }
 
   class MyPreciousStorePluginStrategy {
-    constructor(db) {
+    constructor(db, trx_integration_api) {
       this.db = db
+      this.trx_integration_api = trx_integration_api
     }
 
-    async startTrx(_seneca, pending_trx = null) {
-      if (pending_trx) {
+    async startTrx(seneca) {
+      const is_already_pending = null != this.trx_integration_api.getContext(seneca)
+
+      if (is_already_pending) {
 	throw new Error('There is a pending trx already. Starting a new trx would cause an implicit commit.')
       }
 
@@ -82,24 +86,25 @@ describe('example mysql store integration', () => {
       return null
     }
 
-    async commitTrx(_seneca, trx) {
+    async commitTrx(seneca) {
       await this.db.query('COMMIT')
     }
 
-    async rollbackTrx(_seneca, trx) {
+    async rollbackTrx(seneca) {
       await this.db.query('ROLLBACK')
     }
   }
 
   function MyPreciousStorePlugin(opts) {
     const seneca = this
+    const trx_integration_api = trxIntegrationApi(seneca)
 
-    const store = new MyExampleMysqlStore('MyPrecious', opts).asSenecaStore()
+    const store = new MyExampleMysqlStore('MyPrecious', trx_integration_api, opts).asSenecaStore()
     seneca.store.init(seneca, opts, store)
 
-    if (trxIntegrationApi(seneca)) {
+    if (trx_integration_api) {
       const db = opts.getConnection()
-      trxIntegrationApi(seneca).registerStrategy(new MyPreciousStorePluginStrategy(db))
+      trx_integration_api.registerStrategy(new MyPreciousStorePluginStrategy(db, trx_integration_api))
     }
   }
 

@@ -27,24 +27,29 @@ describe('knex integration', () => {
     let knex_trx
 
     function MyTrxPlugin() {
+      const seneca = this
+      const trx_integration_api = seneca.export('entity-transaction/integration')
+
       const trx_strategy = {
-	async startTrx(_seneca) {
+	async startTrx(seneca) {
 	  const handle = await knex.transaction()
 	  knex_trx = handle
 
 	  return handle
 	},
 
-	async commitTrx(_seneca, trx) {
-	  await trx.ctx.commit()
+	async commitTrx(seneca) {
+	  const { value: trxctx } = trx_integration_api.getContext(seneca)
+	  await trxctx.commit()
 	},
 
-	async rollbackTrx(_seneca, trx) {
-	  await trx.ctx.rollback()
+	async rollbackTrx(seneca) {
+	  const { value: trxctx } = trx_integration_api.getContext(seneca)
+	  await trxctx.rollback()
 	}
       }
 
-      this.export('entity-transaction/integration').registerStrategy(trx_strategy)
+      trx_integration_api.registerStrategy(trx_strategy)
     }
 
 
