@@ -1199,31 +1199,6 @@ describe('example pg knex store integration', () => {
 
     describe('store strategy implementing post-commit hooks', () => {
       function makeTrxStrategyWithPostCommitHooksSupport(knex, trx_integration_api) {
-      	/*
-      const trx_strategy = {
-	async startTrx(seneca) {
-	  const maybe_pending_trxctx = trx_integration_api.getContext(seneca)
-
-	  if (maybe_pending_trxctx) {
-	    const { value: trxctx } = maybe_pending_trxctx
-	    return { knex: await trxctx.knex.transaction() }
-	  }
-
-	  return { knex: await knex.transaction() }
-	},
-
-	async commitTrx(seneca) {
-	  const { value: ctx } = trx_integration_api.getContext(seneca)
-	  await ctx.knex.commit()
-	},
-
-	async rollbackTrx(seneca) {
-	  const { value: ctx } = trx_integration_api.getContext(seneca)
-	  await ctx.knex.rollback()
-	}
-      }
-	*/
-
 	const trx_strategy = {
 	  async startTrx(seneca) {
 	    const maybe_pending_trxctx = trx_integration_api.getContext(seneca)
