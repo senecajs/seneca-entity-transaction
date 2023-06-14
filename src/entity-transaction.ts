@@ -43,20 +43,8 @@ class TrxApi<TCtx> {
   }
 
   async start(): Promise<Seneca> {
-    /*
-    // NOTE: The purpose of retrieving pending transactions is as follows. Many db clients
-    // implement support for nested transactions. Which means that, by retrieving pending trx
-    // clients and passing them to users, the users are able to leverage their db client's
-    // management for nested transactions.
-    //
-    // TODO: This should probably walk the whole delegation chain in search of a pending trx.
-    // Not yet sure.
-    //
-    //const pending_trx = Intern.tryGetPendingTrxOfDelegateOrParentInstance(this.seneca) ?? null
-    */
-
-    // NOTE: If a transaction already exists, we __must__ nonetheless invoke the startTrx
-    // hook because:
+    // NOTE: If a transaction already exists, we __must__ nonetheless invoke
+    // the startTrx hook because:
     // - client's strategy may utilize a db client which supports nested transactions
     // - client's strategy may implement custom logic to handle nested transactions
 
@@ -91,9 +79,9 @@ class TrxApi<TCtx> {
     // ANSWER: TL;DR, here's an example. Assume a db-store plugin uses a db
     // whose driver supports nested transactions.
     //
-    // Now, how would you handle the start-start-rollback-commit scenario without
-    // having the intimate knowledge of the db state, that only the db-store
-    // plugin's db client has? Take a look:
+    // Now, how would you handle the start-start-rollback-commit scenario
+    // without having the intimate knowledge of the db state, that only
+    // the db-store plugin's db client has? Take a look:
     // ```
     // const senecatrx = await this.transaction().start()
     // await senecatrx.entity('user').data$(bob).save$()
@@ -113,9 +101,10 @@ class TrxApi<TCtx> {
 
     // QUESTION: Why are we are not null-ifying completed transactions?
     //
-    // ANSWER: We are not null-ifying completed transactions because we want to leave
-    // it up to a client's strategy to handle reuse of trx instances. This plugin is
-    // just a thin overlay between db-store plugins and Seneca users.
+    // ANSWER: We are not null-ifying completed transactions because we want
+    // to leave it up to a client's strategy to handle reuse of trx instances.
+    // This plugin is just a thin overlay between db-store plugins and
+    // Seneca users.
   }
 
   async rollback() {
@@ -143,42 +132,6 @@ class Intern {
 
     return null
   }
-
-  /*
-  static getPluginMetaStorage(seneca: any) {
-    return seneca.fixedmeta?.custom?.entity_transaction ?? null
-  }
-
-  static getParentOfDelegate(seneca: any) {
-    return Object.getPrototypeOf(seneca)
-  }
-
-  static tryGetPendingTrxOfDelegateOrParentInstance(seneca: any) {
-    // NOTE: If current_pending is not null, then it means the user is trying to start
-    // a nested transaction, e.g.:
-    // ```
-    //	const senecatrx = await this.transaction().start()
-    //	await senecatrx.transaction().start()
-    // ```
-    //
-    const current_pending = Intern.getPluginMetaStorage(seneca)?.trx ?? null
-
-    // NOTE: If parent_pending is not null, then it means the user is trying to reuse
-    // a nested transaction, e.g.:
-    // ```
-    //	let senecatrx
-    //
-    //	senecatrx = await this.transaction().start()
-    //	await senecatrx.transaction().commit()
-    //
-    //	senecatrx = await senecatrx.transaction().start()
-    // ```
-    //
-    const parent_pending = Intern.getPluginMetaStorage(Intern.getParentOfDelegate(seneca))?.trx ?? null
-
-    return current_pending ?? parent_pending ?? null
-  }
-  */
 }
 
 
@@ -218,28 +171,6 @@ function entity_transaction(this: Seneca) {
 
     strategy = strategy_
   }
-
-  /*
-  function tryGetPendingTrx(seneca: any) {
-    // TODO: Test this.
-    //
-    // TODO: QUESTION: Is it OK we are returning parent trx? E.g.:
-    // ```
-    //   const senecatrx = await this.transaction().start()
-    //
-    //   const nestedtrx = await senecatrx.transaction().start()
-    //   await nestedtrx.entity('users').data$(alice).save$() // uses nestedtrx trx
-    //   await nestedtrx.transaction().commit()
-    //
-    //   await nestedtrx.entity('users').data$(bob).save$() // uses senecatrx trx
-    //
-    //   await senecatrx.transaction().commit()
-    // ```
-    // See what knex does in a similar situation (it probably throws an error)
-    //
-    return Intern.tryGetPendingTrxOfDelegateOrParentInstance(this.seneca)?.trx ?? null
-  }
-  */
 
 
   return {
