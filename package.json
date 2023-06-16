@@ -1,24 +1,27 @@
 {
-  "name": "@seneca/gateway",
-  "version": "0.6.2",
-  "main": "dist/gateway.js",
+  "name": "@seneca/entity-transaction",
+  "version": "1.0.0",
+  "main": "dist/entity-transaction.js",
   "type": "commonjs",
-  "types": "dist/gateway.d.ts",
-  "description": "Handle incoming messages within other frameworks.",
-  "homepage": "https://github.com/senecajs/seneca-gateway",
+  "types": "dist/entity-transaction.d.ts",
+  "description": "Housekeeping for db transactions",
+  "homepage": "https://github.com/senecajs/seneca-entity-transaction",
   "keywords": [
     "seneca",
-    "gateway"
+    "seneca-entity",
+    "transaction",
+    "trx",
+    "trex"
   ],
   "author": "Richard Rodger - richardrodger.com",
   "repository": {
     "type": "git",
-    "url": "git://github.com/senecajs/seneca-gateway.git"
+    "url": "git@github.com:senecajs/seneca-entity-transaction.git"
   },
   "scripts": {
-    "test": "jest --coverage",
-    "test-some": "jest -t",
-    "test-watch": "jest --coverage --watchAll",
+    "test": "jest --coverage --runInBand",
+    "test-some": "jest --runInBand -t",
+    "test-watch": "jest --coverage --watchAll --runInBand",
     "watch": "tsc -w -d",
     "build": "tsc -d",
     "clean": "rm -rf node_modules yarn.lock package-lock.json",
@@ -37,17 +40,19 @@
     "node": ">=14"
   },
   "devDependencies": {
-    "@seneca/maintain": "^0.0.22",
-    "@types/jest": "^29.0.3",
-    "@types/node": "^18.7.18",
-    "esbuild": "^0.15.8",
-    "esbuild-jest": "^0.5.0",
-    "jest": "^29.0.3",
-    "seneca-msg-test": "^3.4.0",
-    "typescript": "^4.8.3"
-  },
-  "peerDependencies": {
-    "seneca": ">=3",
-    "seneca-promisify": ">=3"
+    "@seneca/maintain": "0.0.22",
+    "@types/jest": "29.0.3",
+    "@types/node": "18.7.18",
+    "esbuild": "0.15.8",
+    "esbuild-jest": "0.5.0",
+    "jest": "29.0.3",
+    "knex": "2.4.2",
+    "lodash.once": "4.1.1",
+    "mysql2": "3.3.4",
+    "pg": "8.11.0",
+    "seneca": "3.30.1",
+    "seneca-entity": "22.1.0",
+    "seneca-msg-test": "3.4.0",
+    "typescript": "4.8.3"
   }
 }

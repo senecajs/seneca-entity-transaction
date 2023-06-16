@@ -1,0 +1,21 @@
+version: "3.7"
+
+services:
+  postgres_test:
+    build: ./test/support/pg
+    ports:
+     - "5432:5432"
+    environment:
+     - POSTGRES_USER=postgres
+     - POSTGRES_PASSWORD=postgres
+     - POSTGRES_DB=senecatest
+     - POSTGRES_HOST_AUTH_METHOD=trust
+
+  mysql_test:
+    build: ./test/support/mysql
+    ports:
+     - "3306:3306"
+    environment:
+      - MYSQL_ROOT_USER=root
+      - MYSQL_ROOT_PASSWORD=mysql
+      - MYSQL_DATABASE=senecatest
